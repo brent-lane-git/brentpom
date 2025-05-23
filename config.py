@@ -12,7 +12,58 @@ STATS_CSV_FILE_NAME = "2085.csv" # Replace
 JSON_FILE_PATH = os.path.join(DATA_DIR, JSON_FILE_NAME)
 STATS_CSV_FILE_PATH = os.path.join(DATA_DIR, STATS_CSV_FILE_NAME)
 # RECRUITING_CSV_PATH = os.path.join(DATA_DIR, RECRUITING_CSV_FILE_NAME)
+# --- Recruiting Configuration ---
+RECRUITING_CSV_FILE_NAME = "recruiting_2084.csv" # REPLACE with your actual file name
+# Path will be constructed in main_processor.py or data_loader.py if dedicated loader
+# For simplicity, we can add it here if main_processor handles the loading directly for now.
+# RECRUITING_CSV_FILE_PATH = os.path.join(DATA_DIR, RECRUITING_CSV_FILE_NAME) # This line can be in main_processor.py
 
+# Star rating definitions (based on numeric rank for High School recruits)
+# Rank: (min_rank, max_rank) -> stars
+STAR_DEFINITIONS = {
+    5: (1, 30),
+    4: (31, 175),
+    3: (176, 300),
+    2: (301, 400),
+    1: (401, 510) # HS Ranks 401-500 are 1-star, >500 are effectively 0-star or unranked for stars
+}
+# Max numeric rank to consider for star assignment (ranks above this are "unranked" for stars)
+MAX_HS_RANK_FOR_STARS = 510
+
+# NSPN Points
+NSPN_POINTS = {
+    "5_star": 10,
+    "GT": 8,
+    "4_star": 6,
+    "JUCO": 4,
+    "3_star": 3,
+    "CPR": 2,
+    "2_star": 1,
+    "1_star": 0,
+    "HS_unranked": 0, # For HS recruits outside star ranges
+    "Unknown": 0      # Default for unknown types
+}
+KTV_DESIRED_MEAN = 100.0
+KTV_DESIRED_STD_DEV = 15.0 
+# Storms.com Formula Parameters
+STORMS_OVR_BASELINE = 50
+STORMS_OVR_POWER = 1.5 # (OVR - Baseline)^Power
+STORMS_OVR_MAX_CONTRIBUTION = 40 # Max points from OVR portion to prevent one super high OVR dominating too much
+STORMS_BONUS = {
+    "5_star": 20, "4_star": 12, "3_star": 6, "2_star": 2, "1_star": 0, # HS Star bonus
+    "GT": 10, "JUCO": 6, "CPR": 3, "HS_unranked": 0, "Unknown": 0   # Transfer type bonus
+}
+
+# 24/8 Sports Formula Parameters
+TWENTYFOUR_EIGHT_HS_RANK_DECAY_FAST = 0.030 # For rank points: exp(-decay * (rank-1))
+TWENTYFOUR_EIGHT_HS_RANK_DECAY_SLOW = 0.00005 # For rank points: exp(-decay_slow * (rank-1)^2)
+TWENTYFOUR_EIGHT_TRANSFER_OVR_BASELINE = 40.0
+TWENTYFOUR_EIGHT_TRANSFER_POINTS_SCALE = { # Multiplier for (TrueOVR_OnZ - Baseline)
+    "GT": 1.5,
+    "JUCO": 1.1,
+    "CPR": 0.9
+}
+# For 24/8, we'll sum points. A direct quality score, not an average.
 # --- Calculation Constants ---
 POSSESSION_FTA_COEFFICIENT = 0.44
 LUCK_PYTHAGOREAN_EXPONENT = 6
