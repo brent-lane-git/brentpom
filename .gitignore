@@ -13,3 +13,5 @@ __pycache__/data_loader.cpython-313.pyc
 __pycache__/config.cpython-313.pyc
 __pycache__/config.cpython-313.pyc
 *.pyc
+*.csv
+*.json

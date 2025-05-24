@@ -5,7 +5,7 @@ import os
 BASE_DIR = os.path.dirname(os.path.abspath(__file__)) # Gets the directory of config.py
 DATA_DIR = os.path.join(BASE_DIR, "data")
 
-JSON_FILE_NAME = "2085.json" # Replace
+JSON_FILE_NAME = "export_2085.json" # Replace
 STATS_CSV_FILE_NAME = "2085.csv" # Replace
 # RECRUITING_CSV_FILE_NAME = "your_recruiting_data.csv" # For later
 
@@ -17,7 +17,7 @@ RECRUITING_CSV_FILE_NAME = "recruiting_2084.csv" # REPLACE with your actual file
 # Path will be constructed in main_processor.py or data_loader.py if dedicated loader
 # For simplicity, we can add it here if main_processor handles the loading directly for now.
 # RECRUITING_CSV_FILE_PATH = os.path.join(DATA_DIR, RECRUITING_CSV_FILE_NAME) # This line can be in main_processor.py
-
+COACH_CSV_FILE_NAME = "coaches_2085.csv"
 # Star rating definitions (based on numeric rank for High School recruits)
 # Rank: (min_rank, max_rank) -> stars
 STAR_DEFINITIONS = {

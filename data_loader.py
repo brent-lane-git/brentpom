@@ -78,3 +78,29 @@ def load_recruiting_csv(file_path, selected_columns=None):
     except Exception as e:
         print(f"ERROR: An unexpected error occurred loading Recruiting CSV '{file_path}': {e}")
     return None
+def load_coach_csv(file_path, selected_columns=None):
+    """
+    Loads the coach assignment CSV file into a pandas DataFrame.
+    Args:
+        file_path (str): The path to the coach CSV file.
+        selected_columns (list, optional): Specific columns to load.
+    Returns:
+        pandas.DataFrame: The loaded data as a DataFrame, or None if an error occurs.
+    """
+    try:
+        df = pd.read_csv(file_path, usecols=selected_columns, keep_default_na=False, na_filter=False) # Treat empty strings as empty strings, not NaN
+        print(f"Successfully loaded Coach CSV: {file_path}")
+        if selected_columns:
+            missing_sel_cols = [col for col in selected_columns if col not in df.columns]
+            if missing_sel_cols:
+                print(f"WARNING: Coach CSV is missing some of the specifically requested columns after load: {missing_sel_cols}")
+        return df
+    except FileNotFoundError:
+        print(f"ERROR: Coach CSV file not found at '{file_path}'.")
+    except pd.errors.EmptyDataError:
+        print(f"ERROR: Coach CSV file at '{file_path}' is empty.")
+    except ValueError as ve:
+        print(f"ERROR: Coach CSV column issue (e.g., selected columns not found): {ve}")
+    except Exception as e:
+        print(f"ERROR: An unexpected error occurred loading Coach CSV '{file_path}': {e}")
+    return None

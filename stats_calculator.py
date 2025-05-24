@@ -505,48 +505,80 @@ def get_quadrant(location, opponent_rank, quadrant_defs, max_teams_for_ranking_c
     return "Q_Error"
 
 def calculate_quadrant_records(game_team_stats_df, season_team_summary_df, config_params):
-    # ... (Exact same as the version you confirmed working) ...
+    """
+    Calculates quadrant records for each team AND adds a 'game_quadrant' column
+    to the game_team_stats_df.
+    """
     if game_team_stats_df.empty or season_team_summary_df.empty:
         print("WARNING: Empty input DataFrame(s) for Quadrant Records calculation.")
         if not season_team_summary_df.empty:
             for i in range(1, 5): season_team_summary_df[f'q{i}_w'] = 0; season_team_summary_df[f'q{i}_l'] = 0
-        return season_team_summary_df
-    print("Calculating Quadrant Records...")
-    output_df = season_team_summary_df.copy()
-    games_df_for_quads = game_team_stats_df.copy()
-    if 'adj_em' not in output_df.columns:
+        # Return original game_df if it was passed, or an empty one with expected new col
+        if 'game_quadrant' not in game_team_stats_df.columns: game_team_stats_df['game_quadrant'] = "N/A"
+        return game_team_stats_df, season_team_summary_df # Return both
+
+    print("Calculating Quadrant Records and adding 'game_quadrant' to game data...")
+    output_summary_df = season_team_summary_df.copy()
+    games_df_with_quads = game_team_stats_df.copy()
+
+    if 'adj_em' not in output_summary_df.columns:
         print("ERROR: 'adj_em' column missing in season_team_summary_df. Cannot rank for Quadrants.")
-        return output_df
-    output_df.loc[:, 'rank_adj_em'] = output_df.groupby('season')['adj_em'].rank(method='dense', ascending=False).astype(int)
-    team_ranks_lookup = output_df.set_index(['season', 'team_tid'])['rank_adj_em'].to_dict()
-    games_df_for_quads.loc[:, 'opponent_rank'] = games_df_for_quads.apply(lambda row: team_ranks_lookup.get((row['season'], row['opponent_tid']), config_params.MAX_TEAMS_FOR_RANKING + 1), axis=1)
-    games_df_for_quads.loc[:, 'quadrant'] = games_df_for_quads.apply(lambda row: get_quadrant(row['location'], row['opponent_rank'], config_params.QUADRANT_DEFINITIONS, config_params.MAX_TEAMS_FOR_RANKING), axis=1)
-    if 'win' not in games_df_for_quads.columns:
-        games_df_for_quads.loc[:, 'team_score_official_num'] = pd.to_numeric(games_df_for_quads['team_score_official'], errors='coerce').fillna(0)
-        games_df_for_quads.loc[:, 'opponent_score_official_num'] = pd.to_numeric(games_df_for_quads['opponent_score_official'], errors='coerce').fillna(0)
-        games_df_for_quads.loc[:, 'win'] = (games_df_for_quads['team_score_official_num'] > games_df_for_quads['opponent_score_official_num']).astype(int)
-    if 'Q_Error' in games_df_for_quads['quadrant'].unique():
-        print("WARNING: Some games could not be classified into a quadrant ('Q_Error' found). These will be ignored for quadrant summary.")
-        games_df_for_quads = games_df_for_quads[games_df_for_quads['quadrant'] != 'Q_Error']
-    if games_df_for_quads.empty or 'quadrant' not in games_df_for_quads.columns:
-        print("WARNING: No valid games with quadrant info to aggregate. Skipping quadrant W-L merge.")
+        if 'game_quadrant' not in games_df_with_quads.columns: games_df_with_quads['game_quadrant'] = "N/A"
+        return games_df_with_quads, output_summary_df
+
+    if 'rank_adj_em' not in output_summary_df.columns: # Ensure rank exists or calculate it
+        output_summary_df.loc[:, 'rank_adj_em'] = output_summary_df.groupby('season')['adj_em'].rank(method='dense', ascending=False).astype(int)
+    
+    team_ranks_lookup = output_summary_df.set_index(['season', 'team_tid'])['rank_adj_em'].to_dict()
+
+    games_df_with_quads.loc[:, 'opponent_rank'] = games_df_with_quads.apply(
+        lambda row: team_ranks_lookup.get((row['season'], row['opponent_tid']), config_params.MAX_TEAMS_FOR_RANKING + 1), axis=1
+    )
+    games_df_with_quads.loc[:, 'game_quadrant'] = games_df_with_quads.apply( # New column
+        lambda row: get_quadrant(
+            row['location'], row['opponent_rank'],
+            config_params.QUADRANT_DEFINITIONS, config_params.MAX_TEAMS_FOR_RANKING
+        ), axis=1
+    )
+
+    if 'win' not in games_df_with_quads.columns:
+        games_df_with_quads.loc[:, 'team_score_official_num'] = pd.to_numeric(games_df_with_quads['team_score_official'], errors='coerce').fillna(0)
+        games_df_with_quads.loc[:, 'opponent_score_official_num'] = pd.to_numeric(games_df_with_quads['opponent_score_official'], errors='coerce').fillna(0)
+        games_df_with_quads.loc[:, 'win'] = (games_df_with_quads['team_score_official_num'] > games_df_with_quads['opponent_score_official_num']).astype(int)
+    
+    if 'Q_Error' in games_df_with_quads['game_quadrant'].unique():
+        print("WARNING: Some games could not be classified into a quadrant ('Q_Error' found).")
+        # games_df_with_quads = games_df_with_quads[games_df_with_quads['game_quadrant'] != 'Q_Error'] # Optional: filter out errors
+
+    if games_df_with_quads.empty or 'game_quadrant' not in games_df_with_quads.columns:
+        print("WARNING: No valid games with quadrant info to aggregate for team summary.")
     else:
-        quad_records_agg = games_df_for_quads.groupby(['season', 'team_tid', 'quadrant', 'win']).size().unstack(fill_value=0)
+        quad_records_agg = games_df_with_quads.groupby(['season', 'team_tid', 'game_quadrant', 'win']).size().unstack(fill_value=0)
         if 0 in quad_records_agg.columns: quad_records_agg.rename(columns={0: 'L'}, inplace=True)
         else: quad_records_agg['L'] = 0
         if 1 in quad_records_agg.columns: quad_records_agg.rename(columns={1: 'W'}, inplace=True)
         else: quad_records_agg['W'] = 0
         if 'W' not in quad_records_agg.columns: quad_records_agg['W'] = 0
         if 'L' not in quad_records_agg.columns: quad_records_agg['L'] = 0
-        quad_records_final = quad_records_agg[['W', 'L']].unstack(level='quadrant', fill_value=0)
-        new_cols = [f"{col_q_name.lower()}_{col_stat_type.lower()}" for col_stat_type, col_q_name in quad_records_final.columns] # Corrected loop var here
-        quad_records_final.columns = new_cols
-        quad_records_final.reset_index(inplace=True)
-        output_df = pd.merge(output_df, quad_records_final, on=['season', 'team_tid'], how='left')
+        
+        quad_records_final = quad_records_agg[['W', 'L']].unstack(level='game_quadrant', fill_value=0)
+        if not quad_records_final.empty:
+            new_cols = [f"{col_q_name.lower()}_{col_stat_type.lower()}" for col_stat_type, col_q_name in quad_records_final.columns]
+            quad_records_final.columns = new_cols
+            quad_records_final.reset_index(inplace=True)
+            output_summary_df = pd.merge(output_summary_df, quad_records_final, on=['season', 'team_tid'], how='left')
+        else:
+            print("WARNING: quad_records_final is empty after unstacking. No quadrant records to merge.")
+
     for i in range(1, 5):
         for wl_char in ['w', 'l']:
             col_name = f'q{i}_{wl_char}'
-            if col_name not in output_df.columns: output_df[col_name] = 0
-            else: output_df[col_name] = output_df[col_name].fillna(0).astype(int)
-    print("Calculated Quadrant Records.")
-    return output_df
+            if col_name not in output_summary_df.columns: output_summary_df[col_name] = 0
+            else: output_summary_df[col_name] = output_summary_df[col_name].fillna(0).astype(int)
+    
+    # Ensure the game_quadrant column exists in the returned games_df
+    if 'game_quadrant' not in games_df_with_quads.columns:
+        games_df_with_quads['game_quadrant'] = "N/A"
+
+    print("Calculated Quadrant Records (and added 'game_quadrant' to game data).")
+    return games_df_with_quads, output_summary_df

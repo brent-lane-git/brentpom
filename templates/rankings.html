@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; }
+        table { border-collapse: collapse; width: 95%; margin-top: 20px; font-size: 0.9em; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; cursor: pointer; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        tr:hover { background-color: #f1f1f1; }
+        .text-center { text-align: center !important; }
+        .text-right { text-align: right !important; }
+        .number { text-align: right !important; }
+    </style>
+</head>
+<body>
+    <h1>BrentPom College Basketball Analytics</h1>
+    <h2>Team Rankings - Season: {{ current_season }}</h2>
+
+    {% if summaries %}
+    <table>
+        <thead>
+            <tr>
+                <th>Rk</th>
+                <th>Team</th>
+                <th>Conf</th>
+                <th>W-L</th>
+                <th class="number">AdjEM</th>
+                <th class="number">AdjO</th>
+                <th class="number">AdjD</th>
+                <th class="number">Luck</th>
+                <th class="number">SOS (Adj)</th>
+                <th class="number">SOS (BCS)</th>
+                <th class="number">WAB</th>
+                <th>Q1</th>
+                <th>Q2</th>
+                <th>Q3</th>
+                <th>Q4</th>
+                <th class="number">KTV Score</th>
+                </tr>
+        </thead>
+        <tbody>
+            {% for team in summaries %}
+            <tr>
+                <td class="text-center">{{ team.rank if team.rank is not none else 'N/A' }}</td>
+                <td>
+                    {{ team.team_abbrev if team.team_abbrev else 'N/A' }}
+                </td>
+                <td>{{ team.cid if team.cid != -999 else 'N/A' }}</td> <td>{{ team.wins if team.wins is not none else '0' }}-{{ team.losses if team.losses is not none else '0' }}</td>
+                <td class="number">{{ "%.2f"|format(team.adj_em) if team.adj_em is not none else 'N/A' }}</td>
+                <td class="number">{{ "%.1f"|format(team.adj_o) if team.adj_o is not none else 'N/A' }}</td>
+                <td class="number">{{ "%.1f"|format(team.adj_d) if team.adj_d is not none else 'N/A' }}</td>
+                <td class="number">{{ "%.2f"|format(team.luck_adj) if team.luck_adj is not none else 'N/A' }}</td>
+                <td class="number">{{ "%.2f"|format(team.avg_opp_adj_em) if team.avg_opp_adj_em is not none else 'N/A' }}</td>
+                <td class="number">{{ "%.4f"|format(team.sos_bcs) if team.sos_bcs is not none else 'N/A' }}</td>
+                <td class="number">{{ "%.2f"|format(team.wab) if team.wab is not none else 'N/A' }}</td>
+                <td>{{ team.Q1_Record if team.Q1_Record else '0-0' }}</td>
+                <td>{{ team.Q2_Record if team.Q2_Record else '0-0' }}</td>
+                <td>{{ team.Q3_Record if team.Q3_Record else '0-0' }}</td>
+                <td>{{ team.Q4_Record if team.Q4_Record else '0-0' }}</td>
+                <td class="number">{{ "%.2f"|format(team.score_ktv) if team.score_ktv is not none else 'N/A' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No summary data found for season {{ current_season }}. Please run the main_processor.py script.</p>
+    {% endif %}
+
+    <script>
+        // Simple sort function - can be replaced with a library like DataTables.js for more features
+        function sortTable(n, tableId = 'rankingsTable') { // Default to rankingsTable, but template has no ID yet.
+            var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
+            table = document.querySelector("table"); // More robust if table has an ID
+            if (!table) return;
+            switching = true;
+            dir = "asc";
+            while (switching) {
+                switching = false;
+                rows = table.rows;
+                for (i = 1; i < (rows.length - 1); i++) {
+                    shouldSwitch = false;
+                    x = rows[i].getElementsByTagName("TD")[n];
+                    y = rows[i + 1].getElementsByTagName("TD")[n];
+                    var xContent = isNaN(parseFloat(x.innerHTML)) ? x.innerHTML.toLowerCase() : parseFloat(x.innerHTML);
+                    var yContent = isNaN(parseFloat(y.innerHTML)) ? y.innerHTML.toLowerCase() : parseFloat(y.innerHTML);
+                    
+                    if (dir == "asc") {
+                        if (xContent > yContent) { shouldSwitch = true; break; }
+                    } else if (dir == "desc") {
+                        if (xContent < yContent) { shouldSwitch = true; break; }
+                    }
+                }
+                if (shouldSwitch) {
+                    rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
+                    switching = true;
+                    switchcount ++;
+                } else {
+                    if (switchcount == 0 && dir == "asc") {
+                        dir = "desc";
+                        switching = true;
+                    }
+                }
+            }
+            // Add active sort indicator to header (basic example)
+            let ths = table.querySelectorAll('th');
+            ths.forEach(th => th.classList.remove('sorted-asc', 'sorted-desc'));
+            ths[n].classList.add(dir === 'asc' ? 'sorted-asc' : 'sorted-desc');
+        }
+
+        document.querySelectorAll('th').forEach((th, index) => {
+            th.addEventListener('click', () => sortTable(index));
+        });
+    </script>
+</body>
+</html>
