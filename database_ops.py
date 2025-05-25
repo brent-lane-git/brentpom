@@ -31,16 +31,24 @@ def create_tables_if_not_exist():
             name TEXT, region TEXT, full_name TEXT
         );""")
         
-        # GameTeamStats Table
+        # GameTeamStats Table - UPDATED for future games & predictions
         cursor.execute("""DROP TABLE IF EXISTS GameTeamStats;""")
         cursor.execute("""
         CREATE TABLE GameTeamStats ( 
             gid INTEGER, season INTEGER, team_tid INTEGER, opponent_tid INTEGER,
             team_abbrev TEXT, opponent_abbrev TEXT, 
-            location TEXT, overtimes INTEGER, is_national_playoffs BOOLEAN,
-            is_conf_tournament BOOLEAN, team_game_num_in_season INTEGER,
-            team_score_official INTEGER, opponent_score_official INTEGER,
-            designated_home_tid INTEGER, designated_away_tid INTEGER,
+            location TEXT, overtimes INTEGER, 
+            is_played BOOLEAN NOT NULL DEFAULT FALSE,      /* NEW */
+            game_date TEXT,                                /* NEW (can be NULL) */
+            game_time TEXT,                                /* NEW (can be NULL) */
+            is_national_playoffs BOOLEAN,
+            is_conf_tournament BOOLEAN, 
+            team_game_num_in_season INTEGER,
+            team_score_official INTEGER,          /* NULL for future games */
+            opponent_score_official INTEGER,      /* NULL for future games */
+            designated_home_tid INTEGER, 
+            designated_away_tid INTEGER,
+            /* Actual stats - will be NULL for future games initially */
             team_pts REAL, team_poss REAL, team_fgm REAL, team_fga REAL, team_fgm3 REAL, team_fga3 REAL,
             team_ftm REAL, team_fta REAL, team_oreb REAL, team_dreb REAL, team_tov REAL, team_ast REAL,
             team_stl REAL, team_blk REAL, team_pf REAL, team_min REAL,
@@ -52,8 +60,13 @@ def create_tables_if_not_exist():
             def_efg_pct REAL, def_tov_pct REAL, def_opp_orb_pct REAL, def_ft_rate REAL,
             team_drb_pct REAL, team_2p_pct REAL, opp_2p_pct REAL,
             team_3p_pct REAL, opp_3p_pct REAL, team_3p_rate REAL, opp_3p_rate REAL,
-            win INTEGER, loss INTEGER,
-            game_quadrant TEXT,
+            win INTEGER, loss INTEGER,             /* NULL for future games */
+            game_quadrant TEXT,                   /* Can be calculated for future games too */
+            /* Prediction columns - will be NULL for played games */
+            pred_win_prob_team REAL,                    
+            pred_margin_team REAL,                      
+            pred_score_team INTEGER,                    
+            pred_score_opponent INTEGER,                
             PRIMARY KEY (gid, season, team_tid) 
         );""")
 
@@ -127,7 +140,7 @@ def create_tables_if_not_exist():
             num_2_star INTEGER, num_1_star INTEGER, num_hs_unranked INTEGER, 
             num_gt INTEGER, num_juco INTEGER, num_cpr INTEGER,
             score_onz REAL, score_nspn REAL, score_storms REAL, score_248sports REAL,
-            score_ktv REAL, 
+            score_ktv REAL, nt_seed INTEGER, nt_result TEXT, nit_seed INTEGER, nit_result TEXT, 
             PRIMARY KEY (season, team_tid)
         );""")
 
@@ -170,7 +183,6 @@ def create_tables_if_not_exist():
             FOREIGN KEY (coach_id) REFERENCES Coaches(coach_id)
         );""")
         
-        # --- ADDED CoachHeadToHeadStats Table ---
         cursor.execute("""DROP TABLE IF EXISTS CoachHeadToHeadStats;""")
         cursor.execute("""
         CREATE TABLE CoachHeadToHeadStats (
@@ -186,14 +198,26 @@ def create_tables_if_not_exist():
             CHECK (coach1_id < coach2_id) 
         );""")
         conn.commit()
-        print("Database tables checked/created (All tables including Coach H2H).")
+        cursor.execute("""DROP TABLE IF EXISTS PostseasonResults;""")
+        cursor.execute("""
+        CREATE TABLE PostseasonResults (
+            postseason_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            season INTEGER NOT NULL,
+            team_tid INTEGER NOT NULL,
+            event_type TEXT NOT NULL, -- 'NT' or 'NIT'
+            seed INTEGER,             -- Can be NULL
+            result TEXT,              -- e.g., 'Champion', 'Final Four', 'Round 1'
+            FOREIGN KEY (team_tid) REFERENCES Teams(team_tid),
+            UNIQUE (season, team_tid, event_type) 
+        );""")
+        conn.commit()
+        print("Database tables checked/created (PostseasonResults table added).")
     except sqlite3.Error as e:
         print(f"DATABASE ERROR during table creation: {e}")
     finally:
         if conn: conn.close()
 
 def _get_or_create_coach_id(coach_name, conn):
-    # ... (same as response #74) ...
     cursor = conn.cursor()
     cursor.execute("SELECT coach_id FROM Coaches WHERE coach_name = ?", (coach_name,))
     data = cursor.fetchone()
@@ -207,7 +231,6 @@ def _get_or_create_coach_id(coach_name, conn):
         except sqlite3.Error as e: print(f"DB ERROR in _get_or_create_coach_id for {coach_name}: {e}"); return None
 
 def save_coach_data(processed_coach_assignments_df):
-    # ... (same as response #74) ...
     if processed_coach_assignments_df.empty: print("Processed coach assignments DataFrame is empty."); return
     conn = get_db_connection();
     if conn is None: return
@@ -235,7 +258,6 @@ def save_coach_data(processed_coach_assignments_df):
         if conn: conn.close()
 
 def save_teams_df_to_db(teams_df):
-    # ... (same as response #74) ...
     if teams_df.empty: print("Teams DataFrame is empty, nothing to save to DB."); return
     conn = get_db_connection();
     if conn is None: return
@@ -251,78 +273,172 @@ def save_teams_df_to_db(teams_df):
     finally:
         if conn: conn.close()
 
-def save_game_team_stats_to_db(game_team_stats_df):
-    if game_team_stats_df.empty: print("GameTeamStats DataFrame is empty, nothing to save to DB."); return
-    conn = get_db_connection();
+# --- MODIFIED save_game_team_stats_to_db ---
+def save_game_team_stats_to_db(all_games_for_season_df, season_to_clear_and_insert):
+    """
+    Saves all games (played and future, potentially with predictions) for a given season.
+    Deletes ALL existing games for that season first, then inserts all new rows.
+    """
+    if season_to_clear_and_insert is None:
+        print("ERROR: season_to_clear_and_insert is None. Cannot save game stats.")
+        return
+    
+    season_val = int(season_to_clear_and_insert)
+
+    conn = get_db_connection()
     if conn is None: return
-    cursor = conn.cursor()
+    
     try:
-        df_to_save = game_team_stats_df.copy()
-        if 'win' not in df_to_save.columns or 'loss' not in df_to_save.columns:
-            df_to_save['team_score_official'] = pd.to_numeric(df_to_save.get('team_score_official'), errors='coerce').fillna(0)
-            df_to_save['opponent_score_official'] = pd.to_numeric(df_to_save.get('opponent_score_official'), errors='coerce').fillna(0)
-            df_to_save['win'] = (df_to_save['team_score_official'] > df_to_save['opponent_score_official']).astype(int)
-            df_to_save['loss'] = (df_to_save['team_score_official'] < df_to_save['opponent_score_official']).astype(int)
-        
-        cursor.execute("PRAGMA table_info(GameTeamStats)"); table_cols_info = cursor.fetchall()
-        table_cols = [info[1] for info in table_cols_info]
-        
-        df_cols_in_table_order = [col for col in table_cols if col in df_to_save.columns]
-        df_to_save_filtered = df_to_save[df_cols_in_table_order]
-        
-        if df_to_save_filtered.empty or not df_cols_in_table_order :
-            print(f"WARNING: No matching columns for GameTeamStats save. DF cols: {df_to_save.columns.tolist()}, Expected based on schema: {table_cols}")
-            return
+        with conn:
+            cursor = conn.cursor()
+            
+            print(f"Deleting existing game data for season {season_val} from GameTeamStats before insert...")
+            cursor.execute("DELETE FROM GameTeamStats WHERE season = ?", (season_val,))
+            print(f"Deleted {cursor.rowcount} old game-team rows for season {season_val}.")
 
-        cols_filtered_str = ', '.join(f'"{col}"' for col in df_to_save_filtered.columns)
-        placeholders_filtered_str = ', '.join(['?'] * len(df_to_save_filtered.columns))
-        sql = f"INSERT OR IGNORE INTO GameTeamStats ({cols_filtered_str}) VALUES ({placeholders_filtered_str})"
-        
-        num_inserted = 0; num_attempted = 0
-        tuples_to_insert = [tuple(x) for x in df_to_save_filtered.to_numpy()]
+            if all_games_for_season_df.empty:
+                print(f"Input all_games_for_season_df was empty for season {season_val}. No new games to insert after delete.")
+                return
 
-        if tuples_to_insert and len(tuples_to_insert[0]) != len(df_to_save_filtered.columns):
-             print(f"ERROR DB_SAVE_GAMES: Tuple/Column mismatch for GameTeamStats.");
-             if conn: conn.close(); return
-        
-        for row_tuple in tuples_to_insert:
-            num_attempted += 1
-            try: # This try is for individual execute
-                cursor.execute(sql, row_tuple) # This is line 286 from original error
-                if cursor.rowcount > 0:
-                    num_inserted += 1
-            except sqlite3.Error as e: # CORRECTED: Added except block
-                print(f"DATABASE ERROR inserting game row (gid,season,tid might be {row_tuple[:3]}): {e}")
-        
-        conn.commit()
-        print(f"Attempted to save {num_attempted} game-team rows to GameTeamStats. Newly inserted: {num_inserted}.")
-    except Exception as e: print(f"GENERAL ERROR in save_game_team_stats_to_db: {e}")
+            df_to_save = all_games_for_season_df.copy()
+            
+            bool_cols = ['is_played', 'is_national_playoffs', 'is_conf_tournament']
+            for b_col in bool_cols:
+                if b_col in df_to_save.columns:
+                    df_to_save[b_col] = df_to_save[b_col].fillna(0).astype(int)
+            
+            int_cols_can_be_na = ['overtimes', 'team_score_official', 'opponent_score_official',
+                                  'pred_score_team', 'pred_score_opponent', 'win', 'loss',
+                                  'team_game_num_in_season']
+            for i_col in int_cols_can_be_na:
+                if i_col in df_to_save.columns:
+                    df_to_save[i_col] = pd.to_numeric(df_to_save[i_col], errors='coerce').astype('Int64')
+
+            int_cols_must_be_int = ['gid', 'season', 'team_tid', 'opponent_tid',
+                                    'designated_home_tid', 'designated_away_tid']
+            for col in int_cols_must_be_int:
+                 if col in df_to_save.columns:
+                    df_to_save[col] = pd.to_numeric(df_to_save[col], errors='coerce').fillna(0).astype(int)
+
+            cursor.execute("PRAGMA table_info(GameTeamStats)")
+            table_cols = [info[1] for info in cursor.fetchall()]
+            df_cols_in_table_order = [col for col in table_cols if col in df_to_save.columns]
+            df_to_save_filtered = df_to_save[df_cols_in_table_order]
+            
+            if df_to_save_filtered.empty or not df_cols_in_table_order:
+                print(f"WARNING: No matching columns for GameTeamStats save or filtered DF is empty. DF cols: {df_to_save.columns.tolist()}, Table cols: {table_cols}")
+                return
+
+            df_to_save_filtered.to_sql('GameTeamStats', conn, if_exists='append', index=False, chunksize=1000)
+            print(f"Saved {len(df_to_save_filtered)} game-team rows for season {season_val} to GameTeamStats.")
+
+    except sqlite3.Error as e:
+        print(f"DATABASE ERROR in save_game_team_stats_to_db for season {season_val}: {e}")
+    except Exception as ex:
+        print(f"GENERAL ERROR in save_game_team_stats_to_db for season {season_val}: {ex}")
     finally:
         if conn: conn.close()
 
 def save_processed_recruits(processed_recruits_df, class_year_being_processed):
-    # ... (same as response #74) ...
-    if processed_recruits_df.empty: print(f"Processed recruits DataFrame for class {class_year_being_processed} is empty."); return
-    conn = get_db_connection();
+    if processed_recruits_df.empty:
+        print(f"INFO DB_OPS: Processed recruits DataFrame for class {class_year_being_processed} is empty. Performing delete for this class year only.")
+        conn_del = get_db_connection()
+        if conn_del:
+            try:
+                with conn_del: # Ensures commit/rollback
+                    cursor_del = conn_del.cursor()
+                    class_year_val_del = int(class_year_being_processed)
+                    cursor_del.execute("DELETE FROM Recruits WHERE recruiting_class_year = ?", (class_year_val_del,))
+                    print(f"INFO DB_OPS: Deleted {cursor_del.rowcount} existing recruits for class year {class_year_val_del} (as input df was empty).")
+            except Exception as e_del:
+                print(f"ERROR DB_OPS: during delete in save_processed_recruits (empty df case): {e_del}")
+            finally:
+                if conn_del: conn_del.close()
+        return
+
+    conn = get_db_connection()
     if conn is None: return
-    cursor = conn.cursor()
+    
     try:
-        df_to_save = processed_recruits_df.copy()
-        if 'recruiting_class_year' not in df_to_save.columns: df_to_save['recruiting_class_year'] = class_year_being_processed
-        class_year_val = int(class_year_being_processed)
-        cursor.execute("DELETE FROM Recruits WHERE recruiting_class_year = ?", (class_year_val,)); conn.commit()
-        cursor.execute("PRAGMA table_info(Recruits)"); table_cols = [info[1] for info in cursor.fetchall()]
-        df_cols_in_table = [col for col in table_cols if col in df_to_save.columns and col != 'recruit_id']
-        df_to_save_filtered = df_to_save[df_cols_in_table]
-        if not df_to_save_filtered.empty:
-            df_to_save_filtered.to_sql('Recruits', conn, if_exists='append', index=False, chunksize=500)
-            print(f"Saved {len(df_to_save_filtered)} processed recruits for class {class_year_val} to database.")
-    except Exception as e: print(f"ERROR saving processed recruits: {e}")
+        with conn: # Use context manager for commit/rollback
+            cursor = conn.cursor()
+            df_to_save = processed_recruits_df.copy()
+
+            # Fallback: Ensure recruiting_class_year is present and correct type
+            if 'recruiting_class_year' not in df_to_save.columns:
+                print(f"DEBUG DB_OPS: 'recruiting_class_year' column missing from DataFrame in save_processed_recruits. Adding it with value: {class_year_being_processed}")
+                df_to_save['recruiting_class_year'] = int(class_year_being_processed)
+            else:
+                df_to_save['recruiting_class_year'] = pd.to_numeric(df_to_save['recruiting_class_year'], errors='coerce').fillna(int(class_year_being_processed)).astype(int)
+
+            # Fallback: Ensure effective_season is present and correct type
+            if 'effective_season' not in df_to_save.columns:
+                print(f"DEBUG DB_OPS: 'effective_season' column missing. Calculating as recruiting_class_year + 1.")
+                df_to_save['effective_season'] = df_to_save['recruiting_class_year'] + 1
+            else:
+                df_to_save['effective_season'] = pd.to_numeric(df_to_save['effective_season'], errors='coerce').fillna(df_to_save['recruiting_class_year'] + 1).astype(int)
+            
+            # Ensure recruit_name is not null (should be handled by analyzer, but good check)
+            if 'recruit_name' in df_to_save.columns:
+                if df_to_save['recruit_name'].isna().any():
+                    print(f"WARNING DB_OPS: Found NaN in 'recruit_name' before saving recruits. Count: {df_to_save['recruit_name'].isna().sum()}. Filling with 'Unknown Recruit'.")
+                    df_to_save['recruit_name'] = df_to_save['recruit_name'].fillna("Unknown Recruit").astype(str)
+                else:
+                    df_to_save['recruit_name'] = df_to_save['recruit_name'].astype(str)
+            else:
+                print("ERROR DB_OPS: 'recruit_name' column MISSING. Cannot save recruits.")
+                return
+
+
+            class_year_val = int(class_year_being_processed)
+            print(f"Deleting existing recruits for class year {class_year_val} before insert...")
+            cursor.execute("DELETE FROM Recruits WHERE recruiting_class_year = ?", (class_year_val,))
+            print(f"Deleted {cursor.rowcount} old recruits for class year {class_year_val}.")
+            
+            cursor.execute("PRAGMA table_info(Recruits)")
+            table_cols_info = cursor.fetchall()
+            table_cols = [info[1] for info in table_cols_info]
+            
+            # Filter DataFrame columns to only those in the DB table and ensure essential NOT NULL columns are definitely there
+            essential_db_cols = ['recruiting_class_year', 'effective_season', 'recruit_name']
+            df_cols_in_table = [col for col in table_cols if col in df_to_save.columns and col != 'recruit_id']
+            
+            # Ensure essential columns are in the filtered list if they were in df_to_save
+            for ess_col in essential_db_cols:
+                if ess_col in df_to_save.columns and ess_col not in df_cols_in_table and ess_col in table_cols:
+                    df_cols_in_table.append(ess_col)
+            df_cols_in_table = list(dict.fromkeys(df_cols_in_table)) # Remove duplicates, preserve order
+
+            df_to_save_filtered = df_to_save[df_cols_in_table]
+
+            print("DEBUG DB_OPS: df_to_save_filtered before to_sql (head):")
+            print(df_to_save_filtered.head())
+            print("DEBUG DB_OPS: df_to_save_filtered columns:", df_to_save_filtered.columns.tolist())
+            print("DEBUG DB_OPS: df_to_save_filtered dtypes:\n", df_to_save_filtered.dtypes)
+            
+            not_null_cols_schema = ['effective_season', 'recruiting_class_year', 'recruit_name']
+            for nn_col in not_null_cols_schema:
+                if nn_col in df_to_save_filtered.columns:
+                    if df_to_save_filtered[nn_col].isna().any():
+                        print(f"WARNING DB_OPS: Column '{nn_col}' in df_to_save_filtered contains NaNs before to_sql, count: {df_to_save_filtered[nn_col].isna().sum()}. This might violate NOT NULL if not handled by SQLite types (INTEGER can be NULL).")
+                else:
+                     print(f"ERROR DB_OPS: NOT NULL Column '{nn_col}' is MISSING from df_to_save_filtered.")
+                     return # Stop if essential NOT NULL column is completely missing
+
+            if not df_to_save_filtered.empty:
+                df_to_save_filtered.to_sql('Recruits', conn, if_exists='append', index=False, chunksize=500)
+                print(f"Saved {len(df_to_save_filtered)} processed recruits for class {class_year_val} to database.")
+            else:
+                print("INFO DB_OPS: df_to_save_filtered is empty. No recruits saved.")
+
+    except sqlite3.Error as e:
+        print(f"DATABASE ERROR saving processed recruits for class {class_year_being_processed}: {e}")
+    except Exception as ex:
+        print(f"GENERAL ERROR saving processed recruits for class {class_year_being_processed}: {ex}")
     finally:
         if conn: conn.close()
 
 def save_season_summary_to_db(season_team_summary_df, current_season):
-    # ... (same as response #74) ...
     if season_team_summary_df.empty: print("Season summary DataFrame is empty, nothing to save."); return
     if current_season is None: print("ERROR: current_season is None for save_season_summary."); return
     conn = get_db_connection();
@@ -348,7 +464,6 @@ def save_season_summary_to_db(season_team_summary_df, current_season):
         if conn: conn.close()
 
 def load_all_game_stats_for_season(season_to_load):
-    # ... (same as response #74) ...
     conn = get_db_connection();
     if conn is None: return pd.DataFrame()
     df = pd.DataFrame()
@@ -364,7 +479,6 @@ def load_all_game_stats_for_season(season_to_load):
     return df
 
 def load_all_recruits_for_effective_season(effective_season_to_load):
-    # ... (same as response #74) ...
     conn = get_db_connection();
     if conn is None: return pd.DataFrame()
     df = pd.DataFrame()
@@ -379,7 +493,6 @@ def load_all_recruits_for_effective_season(effective_season_to_load):
     return df
 
 def load_coach_assignments_from_db():
-    # ... (same as response #74) ...
     conn = get_db_connection();
     if conn is None: return pd.DataFrame()
     try:
@@ -392,7 +505,6 @@ def load_coach_assignments_from_db():
         if conn: conn.close()
 
 def load_coaches_from_db():
-    # ... (same as response #74) ...
     conn = get_db_connection();
     if conn is None: return pd.DataFrame()
     try:
@@ -403,7 +515,6 @@ def load_coaches_from_db():
         if conn: conn.close()
 
 def save_coach_season_stats(coach_season_stats_df):
-    # ... (same as response #74) ...
     if coach_season_stats_df.empty: print("Coach season stats DataFrame is empty, nothing to save."); return
     conn = get_db_connection();
     if conn is None: return
@@ -430,7 +541,6 @@ def save_coach_season_stats(coach_season_stats_df):
         if conn: conn.close()
 
 def save_coach_career_stats(coach_career_stats_df):
-    # ... (same as response #74) ...
     if coach_career_stats_df.empty: print("Coach career stats DataFrame is empty, nothing to save."); return
     conn = get_db_connection();
     if conn is None: return
@@ -456,7 +566,7 @@ def save_coach_career_stats(coach_career_stats_df):
     finally:
         if conn: conn.close()
 
-def save_coach_head_to_head_stats(coach_h2h_df): # From response #77
+def save_coach_head_to_head_stats(coach_h2h_df):
     if coach_h2h_df.empty:
         print("Coach H2H stats DataFrame is empty, nothing to save.")
         return
@@ -471,6 +581,7 @@ def save_coach_head_to_head_stats(coach_h2h_df): # From response #77
             if seasons_in_df:
                 for season_val in seasons_in_df:
                     cursor.execute("DELETE FROM CoachHeadToHeadStats WHERE season = ?", (int(season_val),))
+            
             cursor.execute("PRAGMA table_info(CoachHeadToHeadStats)")
             table_cols = [info[1] for info in cursor.fetchall()]
             df_to_save = coach_h2h_df.copy()
@@ -478,68 +589,111 @@ def save_coach_head_to_head_stats(coach_h2h_df): # From response #77
                 if tc not in df_to_save.columns:
                     is_count_like = any(kw in tc for kw in ['wins', 'games_played']) or '_id' in tc or tc == 'season'
                     df_to_save[tc] = 0 if is_count_like else np.nan
-            df_to_save_filtered = df_to_save[[col for col in table_cols if col in df_to_save.columns]]
+            
+            df_cols_in_table_order = [col for col in table_cols if col in df_to_save.columns]
+            df_to_save_filtered = df_to_save[df_cols_in_table_order] # Ensure correct order and only existing cols
+            
             if not df_to_save_filtered.empty:
                 df_to_save_filtered.to_sql('CoachHeadToHeadStats', conn, if_exists='append', index=False, chunksize=500)
                 print(f"Saved {len(df_to_save_filtered)} coach H2H stats to the database for seasons: {seasons_in_df}.")
+            else:
+                print(f"No columns in coach_h2h_df matched CoachHeadToHeadStats table after filtering. Nothing saved. DF cols: {df_to_save.columns.tolist()}, Table cols: {table_cols}")
+
+    except sqlite3.Error as e:
+        print(f"DATABASE ERROR saving coach H2H stats: {e}")
     except Exception as ex:
         print(f"GENERAL ERROR saving coach H2H stats: {ex}")
     finally:
         if conn: conn.close()
+
 def load_season_summary_for_display(season_to_load=None):
-    """
-    Loads the SeasonTeamSummaries table for display.
-    If season_to_load is None, it tries to load the most recent season.
-    Sorts by adj_em by default.
-    Adds formatted Q1-Q4 record strings.
-    """
-    conn = get_db_connection()
+    conn = get_db_connection();
     if conn is None: return pd.DataFrame()
-    
-    df = pd.DataFrame()
+    df = pd.DataFrame();
     try:
         target_season = season_to_load
         if target_season is None:
-            # Find the most recent season in the summary table
             s_df = pd.read_sql_query("SELECT DISTINCT season FROM SeasonTeamSummaries ORDER BY season DESC LIMIT 1", conn)
-            if not s_df.empty:
-                target_season = int(s_df['season'].iloc[0])
-            else:
-                print("No seasons found in SeasonTeamSummaries to display.")
-                return pd.DataFrame()
-        
-        if target_season is None: # Still none after trying to find latest
-             print("Could not determine a season to load for display.")
-             return pd.DataFrame()
-
-        target_season = int(target_season) # Ensure it's an integer
+            if not s_df.empty: target_season = int(s_df['season'].iloc[0])
+            else: print("No seasons found in SeasonTeamSummaries to display."); return pd.DataFrame()
+        if target_season is None: print("Could not determine a season to load for display."); return pd.DataFrame()
+        target_season = int(target_season)
         query = "SELECT * FROM SeasonTeamSummaries WHERE season = ? ORDER BY adj_em DESC"
         df = pd.read_sql_query(query, conn, params=(target_season,))
-        
         if not df.empty:
             print(f"Loaded {len(df)} team summaries for season {target_season} for display.")
-            # Format Quadrant Records for display
             for i in range(1, 5):
-                q_w_col = f'q{i}_w'
-                q_l_col = f'q{i}_l'
-                q_rec_col = f'Q{i}_Record' # Use a distinct name for the formatted string
-                if q_w_col in df.columns and q_l_col in df.columns:
-                    df[q_rec_col] = df[q_w_col].astype(str) + "-" + df[q_l_col].astype(str)
+                q_w,q_l,q_rec = f'q{i}_w',f'q{i}_l',f'Q{i}_Record'
+                if q_w in df.columns and q_l in df.columns: df[q_rec] = df[q_w].astype(str) + "-" + df[q_l].astype(str)
+                else: df[q_rec] = "0-0"
+            if 'adj_em' in df.columns: df['rank'] = df['adj_em'].rank(method='min', ascending=False).astype(int)
+            else: df['rank'] = 0
+        else: print(f"No summary data found for season {target_season}.")
+    except Exception as e: print(f"Error loading season summary for display: {e}")
+    finally:
+        if conn: conn.close()
+    return df
+def save_postseason_results(processed_postseason_df, season_to_clear):
+    """Saves processed postseason results. Deletes for the given season then appends."""
+    if processed_postseason_df.empty:
+        print(f"Processed postseason DataFrame for season {season_to_clear} is empty. Only performing delete.")
+    if season_to_clear is None:
+        print("ERROR: season_to_clear is None. Cannot save postseason results.")
+        return
+
+    conn = get_db_connection()
+    if conn is None: return
+    
+    try:
+        with conn:
+            cursor = conn.cursor()
+            season_val = int(season_to_clear)
+            
+            print(f"Deleting existing postseason results for season {season_val}...")
+            cursor.execute("DELETE FROM PostseasonResults WHERE season = ?", (season_val,))
+            print(f"Deleted {cursor.rowcount} old postseason results for season {season_val}.")
+
+            if not processed_postseason_df.empty:
+                df_to_save = processed_postseason_df.copy()
+                
+                # Ensure DataFrame columns match table schema before saving
+                cursor.execute("PRAGMA table_info(PostseasonResults)")
+                table_cols = [info[1] for info in cursor.fetchall()]
+                # 'postseason_id' is autoincrement, so don't include it if df doesn't have it
+                df_cols_to_save = [col for col in table_cols if col in df_to_save.columns and col != 'postseason_id']
+                df_to_save_filtered = df_to_save[df_cols_to_save]
+
+                if not df_to_save_filtered.empty:
+                    df_to_save_filtered.to_sql('PostseasonResults', conn, if_exists='append', index=False, chunksize=100)
+                    print(f"Saved {len(df_to_save_filtered)} postseason results for season {season_val} to DB.")
                 else:
-                    df[q_rec_col] = "0-0"
-            
-            # Add overall rank based on adj_em within the loaded season
-            if 'adj_em' in df.columns:
-                df['rank'] = df['adj_em'].rank(method='min', ascending=False).astype(int)
-            else:
-                df['rank'] = 0
+                    print("WARNING: Postseason DataFrame became empty after filtering for DB columns.")
+            else: # If input df was empty, we only performed the delete
+                 pass
 
 
+    except sqlite3.Error as e:
+        print(f"DATABASE ERROR saving postseason results for season {season_to_clear}: {e}")
+    except Exception as ex:
+        print(f"GENERAL ERROR saving postseason results for season {season_to_clear}: {ex}")
+    finally:
+        if conn: conn.close()
+def load_postseason_results_for_season(season_to_load):
+    """Loads postseason results for a specific season."""
+    conn = get_db_connection()
+    if conn is None: return pd.DataFrame()
+    df = pd.DataFrame()
+    try:
+        season_val = int(season_to_load)
+        # --- CORRECTED QUERY ---
+        query = "SELECT season, team_tid, event_type, seed, result FROM PostseasonResults WHERE season = ?"
+        df = pd.read_sql_query(query, conn, params=(season_val,))
+        if not df.empty:
+            print(f"Loaded {len(df)} postseason result rows for season {season_val} (with season column).")
         else:
-            print(f"No summary data found for season {target_season}.")
-            
+            print(f"No postseason results found for season {season_val}.")
     except Exception as e:
-        print(f"Error loading season summary for display: {e}")
+        print(f"Error loading postseason results for season {season_to_load} from database: {e}")
     finally:
         if conn: conn.close()
     return df

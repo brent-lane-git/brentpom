@@ -78,6 +78,7 @@ RPI_LOCATION_WEIGHT_NEUTRAL = 1.0
 HOME_COURT_ADVANTAGE_POINTS = 1.5 # Points per 100 poss added to home team's expected OE
 NUM_ADJUSTMENT_ITERATIONS = 100 # Number of iterations for the adjustment algorithm
 MAX_TEAMS_FOR_RANKING = 128 # Typical D1 teams, adjust as needed for your league size
+MAX_PREDICTED_SCORE_DIFFERENCE = 50.0
 # --- WAB Configuration ---
 # Defines the rank (by adjEM, higher adjEM = better rank) of a typical "bubble" team.
 # Adjust this based on your league's typical tournament qualification spots.
@@ -90,6 +91,11 @@ DATABASE_FILE_PATH = os.path.join(BASE_DIR, "data", "brentpom.db")
 # Roughly, an adjEM difference of 10 points often corresponds to ~85% win prob.
 # 1 / (1 + exp(-Margin * C)) = WinProb. If Margin=10, WinProb=0.85 -> C ~ 0.173
 WIN_PROB_SCALING_FACTOR = 0.173
+TARGET_SEASON_FOR_STATS = 2085
+TARGET_RECRUITING_CLASS_YEAR = 2084
+TARGET_COACH_ASSIGNMENT_YEAR = 2085
+POSTSEASON_RESULTS_CSV_FILE_NAME = "postseason_2085.csv"
+POSTSEASON_CSV_COLS = ['Event', 'Seed', 'Team', 'Result']
 # --- Quadrant Definitions (User Provided) ---
 # Ranks are inclusive. Opponent's rank is based on our adjEM.
 # Higher adjEM = better rank (Rank 1 is best).

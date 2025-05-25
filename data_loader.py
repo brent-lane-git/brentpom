@@ -104,3 +104,26 @@ def load_coach_csv(file_path, selected_columns=None):
     except Exception as e:
         print(f"ERROR: An unexpected error occurred loading Coach CSV '{file_path}': {e}")
     return None
+def load_postseason_csv(file_path, selected_columns=None):
+    """
+    Loads the postseason results CSV file into a pandas DataFrame.
+    """
+    try:
+        # Specify dtype for Seed to avoid mixed type issues if some are missing
+        # but pandas usually handles this fine with read_csv if NaNs are present
+        df = pd.read_csv(file_path, usecols=selected_columns, keep_default_na=True, na_filter=True)
+        print(f"Successfully loaded Postseason CSV: {file_path}")
+        if selected_columns:
+            missing_sel_cols = [col for col in selected_columns if col not in df.columns]
+            if missing_sel_cols:
+                print(f"WARNING: Postseason CSV is missing some of the specifically requested columns after load: {missing_sel_cols}")
+        return df
+    except FileNotFoundError:
+        print(f"ERROR: Postseason CSV file not found at '{file_path}'.")
+    except pd.errors.EmptyDataError:
+        print(f"ERROR: Postseason CSV file at '{file_path}' is empty.")
+    except ValueError as ve: # Catches issues like columns in usecols not in file
+        print(f"ERROR: Postseason CSV column issue: {ve}")
+    except Exception as e:
+        print(f"ERROR: An unexpected error occurred loading Postseason CSV '{file_path}': {e}")
+    return None
