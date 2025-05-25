@@ -45,6 +45,32 @@ def main():
     teams_df, tid_to_abbrev, abbrev_to_tid = create_team_lookup(zengm_data)
     if not teams_df.empty: database_ops.save_teams_df_to_db(teams_df)
     else: print("Critical error: Team lookup creation failed."); return
+    if 'conferences' in zengm_data: # Condition 1
+        print("DEBUG MAIN: Found 'conferences' key in zengm_data.") # Added for clarity
+        cid_to_conf_abbrev_map = {
+            conf.get('cid'): conf.get('abbrev', f"C{conf.get('cid')}")
+            for conf in zengm_data.get('conferences', []) if conf.get('cid') is not None
+        }
+        if cid_to_conf_abbrev_map: # Condition 2
+            print(f"DEBUG MAIN: cid_to_conf_abbrev_map created with {len(cid_to_conf_abbrev_map)} entries.") # Added for clarity
+            try:
+                # Ensure DATA_DIR exists
+                if not os.path.exists(config.DATA_DIR):
+                    os.makedirs(config.DATA_DIR)
+                    print(f"DEBUG MAIN: Created data directory: {config.DATA_DIR}")
+
+                conference_lookup_path = os.path.join(config.DATA_DIR, 'conference_lookup.json')
+                with open(conference_lookup_path, 'w') as f:
+                    json.dump(cid_to_conf_abbrev_map, f)
+                print(f"Conference lookup saved to {conference_lookup_path}")
+            except Exception as e:
+                print(f"Error saving conference lookup: {e}")
+        else:
+            print("DEBUG MAIN: cid_to_conf_abbrev_map is empty or None after processing 'conferences' array. Conference lookup not saved.")
+            # Print the raw conferences array to see why it might be empty
+            print("DEBUG MAIN: Raw 'conferences' array from zengm_data:", zengm_data.get('conferences', []))
+    else:
+        print("DEBUG MAIN: 'conferences' key not found in zengm_data. Conference lookup not created.")
 
     # --- Use Configured Years ---
     try:

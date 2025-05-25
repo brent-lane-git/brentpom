@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{{ page_title if page_title else "Conferences - BrentPom" }}</title>
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+        <style>
+            .conference-table th, .conference-table td { font-size: 0.9em; white-space: nowrap; }
+            .conference-table th.col-name, .conference-table td.col-name { white-space: normal; min-width: 150px; }
+        </style>
+    </head>
+    <body>
+        {% include 'header.html' %}
+        
+        <div class="container">
+            <h2 class="page-title">{{ page_title }}</h2>
+
+            {% if conference_summaries %}
+                <table class="conference-table" id="conferenceTable">
+                    <thead>
+                        <tr>
+                            <th class="col-name" onclick="sortTable(0)">Conference</th>
+                            <th onclick="sortTable(1)">Overall W-L</th>
+                            <th onclick="sortTable(2)" class="number">Win %</th>
+                            <th onclick="sortTable(3)" class="number">Avg AdjEM</th>
+                            <th onclick="sortTable(4)" class="number">Avg AdjO</th>
+                            <th onclick="sortTable(5)" class="number">Avg AdjD</th>
+                            <th onclick="sortTable(6)" class="number">Avg AdjEM SOS</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for conf in conference_summaries %}
+                        <tr>
+                            <td class="col-name">
+                                {# --- UPDATED LINK --- #}
+                                <a href="{{ url_for('conference_detail_page', conf_id=conf.cid, season_year=current_season_displayed if current_season_displayed != 'N/A' else None) }}">
+                                    {{ conf.conf_name }} {# Assumes conf_name has full name or abbrev #}
+                                </a>
+                            </td>
+                            <td>{{ conf.total_wins }}-{{ conf.total_losses }}</td>
+                            <td class="number">{{ "%.3f"|format(conf.conf_win_pct) }}</td>
+                            <td class="number">{{ "%.2f"|format(conf.avg_adjem) if conf.avg_adjem is not none else 'N/A' }}</td>
+                            <td class="number">{{ "%.1f"|format(conf.avg_adjo) if conf.avg_adjo is not none else 'N/A' }}</td>
+                            <td class="number">{{ "%.1f"|format(conf.avg_adjd) if conf.avg_adjd is not none else 'N/A' }}</td>
+                            <td class="number">{{ "%.2f"|format(conf.avg_adjsos) if conf.avg_adjsos is not none else 'N/A' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p>No conference summary data found for season {{ current_season_displayed }}.</p>
+            {% endif %}
+        </div>
+    {% include 'footer.html' %}
+    {# Add sortTable JS if desired, similar to rankings.html and adjust indices #}
+    <script>
+        function sortTable(n) {
+            var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
+            table = document.getElementById("conferenceTable");
+            if (!table) return;
+            switching = true;
+            dir = table.rows[0].getElementsByTagName("TH")[n].getAttribute("data-sort-dir") === "asc" ? "desc" : "asc";
+            
+            for (let th_idx = 0; th_idx < table.rows[0].getElementsByTagName("TH").length; th_idx++) {
+                table.rows[0].getElementsByTagName("TH")[th_idx].removeAttribute("data-sort-dir");
+                table.rows[0].getElementsByTagName("TH")[th_idx].classList.remove('sort-asc', 'sort-desc');
+            }
+            table.rows[0].getElementsByTagName("TH")[n].setAttribute("data-sort-dir", dir);
+            table.rows[0].getElementsByTagName("TH")[n].classList.add(dir === "asc" ? 'sort-asc' : 'sort-desc');
+
+            while (switching) {
+                switching = false; rows = table.rows;
+                for (i = 1; i < (rows.length - 1); i++) {
+                    shouldSwitch = false; xCell = rows[i].getElementsByTagName("TD")[n]; yCell = rows[i + 1].getElementsByTagName("TD")[n];
+                    var xContent = xCell.innerText.trim().toLowerCase(); var yContent = yCell.innerText.trim().toLowerCase();
+                    let xNum = parseFloat(xContent.replace(/,/g, '').split('-')[0]); let yNum = parseFloat(yContent.replace(/,/g, '').split('-')[0]);
+                    if (!isNaN(xNum) && !isNaN(yNum) && (xCell.classList.contains('number') || n > 1)) { // n > 1 for numeric cols after Conf Name & W-L
+                        if (dir == "asc") { if (xNum > yNum) { shouldSwitch = true; break; } }
+                        else if (dir == "desc") { if (xNum < yNum) { shouldSwitch = true; break; } }
+                    } else {
+                        if (dir == "asc") { if (xContent > yContent) { shouldSwitch = true; break; } }
+                        else if (dir == "desc") { if (xContent < yContent) { shouldSwitch = true; break; } }
+                    }
+                }
+                if (shouldSwitch) { rows[i].parentNode.insertBefore(rows[i + 1], rows[i]); switching = true; switchcount++; }
+            }
+        }
+        document.querySelectorAll('#conferenceTable th').forEach((th, index) => {
+            th.addEventListener('click', () => sortTable(index));
+        });
+    </script>
+</body>
+</html>

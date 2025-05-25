@@ -1,0 +1,132 @@
+{# templates/coaches_list.html #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title if page_title else "Coaches - BrentPom" }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .coaches-table th, .coaches-table td {
+            font-size: 0.85em;
+            white-space: nowrap;
+        }
+        .coaches-table td.number, .coaches-table th.number { text-align: right;}
+        .coaches-table td.center, .coaches-table th.center { text-align: center;}
+    </style>
+</head>
+<body>
+    {% include 'header.html' %}
+
+    <div class="container">
+        <h2 class="page-title">{{ page_title }}</h2>
+
+        {% if coaches %}
+            <table class="coaches-table" id="coachesTable"> {# Added id for potential JS sorting #}
+                <thead>
+                    <tr>
+                        <th onclick="sortTable(0)">Coach Name</th>
+                        <th onclick="sortTable(1)" class="center">Seasons</th>
+                        <th onclick="sortTable(2)" class="center">Teams</th>
+                        <th onclick="sortTable(3)">Career W-L</th>
+                        <th onclick="sortTable(4)" class="number">Win %</th>
+                        <th onclick="sortTable(5)" class="center">NT Apps</th>
+                        <th onclick="sortTable(6)" class="center">NT Champs</th>
+                        <th onclick="sortTable(7)" class="center">NT F4s</th>
+                        <th onclick="sortTable(8)" class="center">NIT Apps</th>
+                        <th onclick="sortTable(9)" class="center">Total Recruits</th>
+                        <th onclick="sortTable(10)" class="number">Avg Rec OVR</th>
+                        <th onclick="sortTable(11)" class="center">5★</th>
+                        <th onclick="sortTable(12)" class="center">4★</th>
+                        <th onclick="sortTable(13)" class="center">GTs</th>
+                        <th onclick="sortTable(14)" class="number">Avg KTV</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for coach in coaches %}
+                    <tr>
+                        <td>
+                            <a href="{{ url_for('coach_detail_page', coach_id=coach.coach_id) }}" class="coach-link">
+                                {{ coach.coach_name }}
+                            </a>
+                        </td>
+                        <td class="center">{{ coach.get('seasons_coached', 0) }}</td>
+                        <td class="center">{{ coach.get('teams_coached_count', 0) }}</td>
+                        <td>{{ coach.get('total_wins',0) }}-{{ coach.get('total_losses',0) }}</td>
+                        <td class="number">{{ "%.3f"|format(coach.get('career_win_pct',0.0)) }}</td>
+                        <td class="center">{{ coach.get('career_nt_appearances_calc', 0) }}</td>
+                        <td class="center">{{ coach.get('career_nt_champs_calc', 0) }}</td>
+                        <td class="center">{{ coach.get('career_final_fours_calc', 0) }}</td>
+                        <td class="center">{{ coach.get('career_nit_appearances_calc', 0) }}</td>
+                        <td class="center">{{ coach.get('career_total_recruits',0) }}</td>
+                        <td class="number">{{ "%.1f"|format(coach.get('career_avg_recruit_ovr_of_classes')) if coach.get('career_avg_recruit_ovr_of_classes') is not none else 'N/A' }}</td>
+                        <td class="center">{{ coach.get('career_total_5_stars',0) }}</td>
+                        <td class="center">{{ coach.get('career_total_4_stars',0) }}</td>
+                        <td class="center">{{ coach.get('career_total_gt_calc',0) }}</td>
+                        <td class="number">{{ "%.2f"|format(coach.get('career_avg_score_ktv')) if coach.get('career_avg_score_ktv') is not none else 'N/A' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>No coaches found in the database.</p>
+        {% endif %}
+    </div>
+
+    {% include 'footer.html' %}
+    {# Add sortTable JS if desired, similar to rankings.html #}
+    <script>
+        function sortTable(n) {
+            var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
+            table = document.getElementById("coachesTable"); // Ensure this ID matches your table
+            if (!table) return;
+            switching = true;
+            dir = "asc";
+            var currentSortDir = table.rows[0].getElementsByTagName("TH")[n].getAttribute("data-sort-dir");
+            if (currentSortDir === "asc") { dir = "desc"; }
+
+            for (let th_idx = 0; th_idx < table.rows[0].getElementsByTagName("TH").length; th_idx++) {
+                table.rows[0].getElementsByTagName("TH")[th_idx].removeAttribute("data-sort-dir");
+                table.rows[0].getElementsByTagName("TH")[th_idx].classList.remove('sort-asc', 'sort-desc');
+            }
+            table.rows[0].getElementsByTagName("TH")[n].setAttribute("data-sort-dir", dir);
+            table.rows[0].getElementsByTagName("TH")[n].classList.add(dir === "asc" ? 'sort-asc' : 'sort-desc');
+
+            while (switching) {
+                switching = false;
+                rows = table.rows;
+                for (i = 1; i < (rows.length - 1); i++) {
+                    shouldSwitch = false;
+                    xCell = rows[i].getElementsByTagName("TD")[n];
+                    yCell = rows[i + 1].getElementsByTagName("TD")[n];
+                    var xContent = xCell.innerText.trim().toLowerCase();
+                    var yContent = yCell.innerText.trim().toLowerCase();
+
+                    // For W-L, sort by wins first then by losses (more complex, skip for simple sort)
+                    // For now, general numeric or string sort
+                    let xNum = parseFloat(xContent.replace(/,/g, '').split('-')[0]); // Try to get first part of W-L as number
+                    let yNum = parseFloat(yContent.replace(/,/g, '').split('-')[0]);
+
+                    if (!isNaN(xNum) && !isNaN(yNum) && (xCell.classList.contains('number') || xCell.classList.contains('center'))) {
+                        if (dir == "asc") { if (xNum > yNum) { shouldSwitch = true; break; } }
+                        else if (dir == "desc") { if (xNum < yNum) { shouldSwitch = true; break; } }
+                    } else {
+                        if (dir == "asc") { if (xContent > yContent) { shouldSwitch = true; break; } }
+                        else if (dir == "desc") { if (xContent < yContent) { shouldSwitch = true; break; } }
+                    }
+                }
+                if (shouldSwitch) {
+                    rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
+                    switching = true;
+                    switchcount++;
+                }
+            }
+        }
+        document.querySelectorAll('#coachesTable th').forEach((th, index) => {
+            if (index !== 0) { // Don't sort by coach name for now with this simple sorter if it's complex
+                 th.addEventListener('click', () => sortTable(index));
+            }
+        });
+    </script>
+</body>
+</html>

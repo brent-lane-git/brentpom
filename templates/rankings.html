@@ -3,115 +3,154 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ title }}</title>
-    <style>
-        body { font-family: sans-serif; margin: 20px; }
-        table { border-collapse: collapse; width: 95%; margin-top: 20px; font-size: 0.9em; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background-color: #f2f2f2; cursor: pointer; }
-        tr:nth-child(even) { background-color: #f9f9f9; }
-        tr:hover { background-color: #f1f1f1; }
-        .text-center { text-align: center !important; }
-        .text-right { text-align: right !important; }
-        .number { text-align: right !important; }
-    </style>
+    <title>{{ title if title else "BrentPom Rankings" }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-    <h1>BrentPom College Basketball Analytics</h1>
-    <h2>Team Rankings - Season: {{ current_season }}</h2>
+    {% include 'header.html' %} {# Assumes active_tab, all_available_seasons, etc. are passed #}
 
-    {% if summaries %}
-    <table>
-        <thead>
-            <tr>
-                <th>Rk</th>
-                <th>Team</th>
-                <th>Conf</th>
-                <th>W-L</th>
-                <th class="number">AdjEM</th>
-                <th class="number">AdjO</th>
-                <th class="number">AdjD</th>
-                <th class="number">Luck</th>
-                <th class="number">SOS (Adj)</th>
-                <th class="number">SOS (BCS)</th>
-                <th class="number">WAB</th>
-                <th>Q1</th>
-                <th>Q2</th>
-                <th>Q3</th>
-                <th>Q4</th>
-                <th class="number">KTV Score</th>
+    <div class="container">
+        {% if is_conference_view %}
+            <h2 class="page-title">{{ conference_name_for_view }} Rankings - Season: {{ current_season_displayed if current_season_displayed != "N/A (No Data)" else "Select a Season" }}</h2>
+        {% else %}
+            <h2 class="page-title">Team Rankings - Season: {{ current_season_displayed if current_season_displayed != "N/A (No Data)" else "Select a Season" }}</h2>
+        {% endif %}
+
+        {% if summaries %}
+        <table id="rankingsTable">
+            <thead>
+                <tr>
+                    <th onclick="sortTable(0)" class="col-rk">Rk</th>
+                    <th onclick="sortTable(1)" class="col-team">Team</th>
+                    <th onclick="sortTable(2)" class="col-conf">Conf</th>
+                    <th onclick="sortTable(3)" class="col-coach">Coach</th>
+                    <th onclick="sortTable(4)" class="col-wl">W-L</th>
+                    <th onclick="sortTable(5)" class="col-adjem number">AdjEM</th>
+                    <th onclick="sortTable(6)" class="col-adjo number">AdjO</th>
+                    <th onclick="sortTable(7)" class="col-adjd number">AdjD</th>
+                    <th onclick="sortTable(8)" class="col-luck number">Luck</th>
+                    <th onclick="sortTable(9)" class="col-sos number">SOS AdjEM</th>
+                    <th onclick="sortTable(10)" class="col-sos number">SOS BCS</th>
+                    <th onclick="sortTable(11)" class="col-wab number">WAB</th>
+                    <th onclick="sortTable(12)" class="col-q text-center">Q1</th>
+                    <th onclick="sortTable(13)" class="col-q text-center">Q2</th>
+                    <th onclick="sortTable(14)" class="col-q text-center">Q3</th>
+                    <th onclick="sortTable(15)" class="col-q text-center">Q4</th>
+                    <th onclick="sortTable(16)" class="col-ktv number">KTV Score</th>
                 </tr>
-        </thead>
-        <tbody>
-            {% for team in summaries %}
-            <tr>
-                <td class="text-center">{{ team.rank if team.rank is not none else 'N/A' }}</td>
-                <td>
-                    {{ team.team_abbrev if team.team_abbrev else 'N/A' }}
-                </td>
-                <td>{{ team.cid if team.cid != -999 else 'N/A' }}</td> <td>{{ team.wins if team.wins is not none else '0' }}-{{ team.losses if team.losses is not none else '0' }}</td>
-                <td class="number">{{ "%.2f"|format(team.adj_em) if team.adj_em is not none else 'N/A' }}</td>
-                <td class="number">{{ "%.1f"|format(team.adj_o) if team.adj_o is not none else 'N/A' }}</td>
-                <td class="number">{{ "%.1f"|format(team.adj_d) if team.adj_d is not none else 'N/A' }}</td>
-                <td class="number">{{ "%.2f"|format(team.luck_adj) if team.luck_adj is not none else 'N/A' }}</td>
-                <td class="number">{{ "%.2f"|format(team.avg_opp_adj_em) if team.avg_opp_adj_em is not none else 'N/A' }}</td>
-                <td class="number">{{ "%.4f"|format(team.sos_bcs) if team.sos_bcs is not none else 'N/A' }}</td>
-                <td class="number">{{ "%.2f"|format(team.wab) if team.wab is not none else 'N/A' }}</td>
-                <td>{{ team.Q1_Record if team.Q1_Record else '0-0' }}</td>
-                <td>{{ team.Q2_Record if team.Q2_Record else '0-0' }}</td>
-                <td>{{ team.Q3_Record if team.Q3_Record else '0-0' }}</td>
-                <td>{{ team.Q4_Record if team.Q4_Record else '0-0' }}</td>
-                <td class="number">{{ "%.2f"|format(team.score_ktv) if team.score_ktv is not none else 'N/A' }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <p>No summary data found for season {{ current_season }}. Please run the main_processor.py script.</p>
-    {% endif %}
+            </thead>
+            <tbody>
+                {% for team in summaries %}
+                <tr>
+                    <td class="text-center col-rk">{{ team.rank if team.rank is not none else 'N/A' }}</td>
+                    <td class="team-name-cell col-team
+                        {% if team.nt_result == 'Champion' %}nt-champion
+                        {% elif team.nt_result and team.nt_result != 'N/A' and team.nt_result != 0 %}nt-appearance
+                        {% elif team.nit_result and team.nit_result != 'N/A' and team.nit_result != 0 %}nit-appearance
+                        {% endif %}
+                    ">
+                        <a href="{{ url_for('team_page', team_tid=team.team_tid, season_year=current_season_displayed if current_season_displayed != 'N/A' else None) }}" class="team-link">
+                            {{ team.team_abbrev if team.team_abbrev else 'N/A' }}
+                        </a>
+                        <span class="postseason-info">
+                            {% set displayed_postseason = false %}
+                            {% if team.nt_result and team.nt_result != 'N/A' and team.nt_result != 0 %}
+                                NT
+                                {% if team.nt_seed is not none and team.nt_seed != 0 %}{{ team.nt_seed|int }}{% endif %}
+                                -
+                                {% if team.nt_result == 'Champion' %}🏆
+                                {% else %}{{ team.nt_result }}{% endif %}
+                                {% set displayed_postseason = true %}
+                            {% endif %}
+                            {% if not displayed_postseason and team.nit_result and team.nit_result != 'N/A' and team.nit_result != 0 %}
+                                NIT
+                                {% if team.nit_seed is not none and team.nit_seed != 0 %}{{ team.nit_seed|int }}{% endif %}
+                                -
+                                {% if team.nit_result == 'NIT Champion' %}🍩
+                                {% else %}{{ team.nit_result }}{% endif %}
+                            {% endif %}
+                        </span>
+                    </td>
+                    <td class="col-conf">
+                        {% if team.cid is not none and team.cid != -999 %}
+                            <a href="{{ url_for('conference_detail_page', conf_id=team.cid, season_year=current_season_displayed if current_season_displayed != 'N/A' else None) }}" class="team-link">
+                                {{ cid_to_conf_abbrev_map.get(team.cid|int, "Conf " ~ team.cid|string) }}
+                            </a>
+                        {% else %}
+                            N/A
+                        {% endif %}
+                    </td>
+                    <td class="col-coach">
+                        {% set team_coach_id = team.get('coach_id') %}
+                        {% set team_coach_name = team.get('coach_name', 'N/A') %}
+                        {% if team_coach_id is not none and team_coach_id != 0 and team_coach_name != 'N/A' %}
+                            <a href="{{ url_for('coach_detail_page', coach_id=team_coach_id, season_year=current_season_displayed if current_season_displayed != 'N/A' else None) }}" class="coach-link">
+                                {{ team_coach_name }}
+                            </a>
+                        {% else %}
+                            {{ team_coach_name }}
+                        {% endif %}
+                    </td>
+                    <td class="col-wl">{{ team.wins if team.wins is not none else '0' }}-{{ team.losses if team.losses is not none else '0' }}</td>
+                    <td class="number col-adjem">{{ "%.2f"|format(team.adj_em) if team.adj_em is not none else 'N/A' }}</td>
+                    <td class="number col-adjo">{{ "%.1f"|format(team.adj_o) if team.adj_o is not none else 'N/A' }}</td>
+                    <td class="number col-adjd">{{ "%.1f"|format(team.adj_d) if team.adj_d is not none else 'N/A' }}</td>
+                    <td class="number col-luck">{{ "%.2f"|format(team.luck_adj) if team.luck_adj is not none else 'N/A' }}</td>
+                    <td class="number col-sos">{{ "%.2f"|format(team.avg_opp_adj_em) if team.avg_opp_adj_em is not none else 'N/A' }}</td>
+                    <td class="number col-sos">{{ "%.4f"|format(team.sos_bcs) if team.sos_bcs is not none else 'N/A' }}</td>
+                    <td class="number col-wab">{{ "%.2f"|format(team.wab) if team.wab is not none else 'N/A' }}</td>
+                    <td class="text-center col-q">{{ team.Q1_Record if team.Q1_Record else '0-0' }}</td>
+                    <td class="text-center col-q">{{ team.Q2_Record if team.Q2_Record else '0-0' }}</td>
+                    <td class="text-center col-q">{{ team.Q3_Record if team.Q3_Record else '0-0' }}</td>
+                    <td class="text-center col-q">{{ team.Q4_Record if team.Q4_Record else '0-0' }}</td>
+                    <td class="number col-ktv">{{ "%.2f"|format(team.get('score_ktv')) if team.get('score_ktv') is not none else 'N/A' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p>No summary data found for season {{ current_season_displayed }}. Please ensure your data processing script (main_processor.py) has run successfully and data exists for this season.</p>
+        {% endif %}
+    </div>
+    {% include 'footer.html' %}
 
     <script>
-        // Simple sort function - can be replaced with a library like DataTables.js for more features
-        function sortTable(n, tableId = 'rankingsTable') { // Default to rankingsTable, but template has no ID yet.
+        // Basic table sorting script
+        function sortTable(n) {
             var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
-            table = document.querySelector("table"); // More robust if table has an ID
+            table = document.getElementById("rankingsTable");
             if (!table) return;
             switching = true;
-            dir = "asc";
-            while (switching) {
-                switching = false;
-                rows = table.rows;
-                for (i = 1; i < (rows.length - 1); i++) {
-                    shouldSwitch = false;
-                    x = rows[i].getElementsByTagName("TD")[n];
-                    y = rows[i + 1].getElementsByTagName("TD")[n];
-                    var xContent = isNaN(parseFloat(x.innerHTML)) ? x.innerHTML.toLowerCase() : parseFloat(x.innerHTML);
-                    var yContent = isNaN(parseFloat(y.innerHTML)) ? y.innerHTML.toLowerCase() : parseFloat(y.innerHTML);
-                    
-                    if (dir == "asc") {
-                        if (xContent > yContent) { shouldSwitch = true; break; }
-                    } else if (dir == "desc") {
-                        if (xContent < yContent) { shouldSwitch = true; break; }
-                    }
-                }
-                if (shouldSwitch) {
-                    rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
-                    switching = true;
-                    switchcount ++;
-                } else {
-                    if (switchcount == 0 && dir == "asc") {
-                        dir = "desc";
-                        switching = true;
-                    }
-                }
+            var currentSortDir = table.rows[0].getElementsByTagName("TH")[n].getAttribute("data-sort-dir");
+            dir = (currentSortDir === "asc") ? "desc" : "asc";
+            
+            for (let th_idx = 0; th_idx < table.rows[0].getElementsByTagName("TH").length; th_idx++) {
+                table.rows[0].getElementsByTagName("TH")[th_idx].removeAttribute("data-sort-dir");
+                table.rows[0].getElementsByTagName("TH")[th_idx].classList.remove('sort-asc', 'sort-desc');
             }
-            // Add active sort indicator to header (basic example)
-            let ths = table.querySelectorAll('th');
-            ths.forEach(th => th.classList.remove('sorted-asc', 'sorted-desc'));
-            ths[n].classList.add(dir === 'asc' ? 'sorted-asc' : 'sorted-desc');
-        }
+            table.rows[0].getElementsByTagName("TH")[n].setAttribute("data-sort-dir", dir);
+            table.rows[0].getElementsByTagName("TH")[n].classList.add(dir === "asc" ? 'sort-asc' : 'sort-desc');
 
-        document.querySelectorAll('th').forEach((th, index) => {
+            while (switching) {
+                switching = false; rows = table.rows;
+                for (i = 1; i < (rows.length - 1); i++) {
+                    shouldSwitch = false; xCell = rows[i].getElementsByTagName("TD")[n]; yCell = rows[i + 1].getElementsByTagName("TD")[n];
+                    var xContent = xCell.innerText.trim().toLowerCase(); var yContent = yCell.innerText.trim().toLowerCase();
+                    let xNum = parseFloat(xContent.replace(/,/g, '')); let yNum = parseFloat(yContent.replace(/,/g, ''));
+
+                    let numericSortCols = [0, 5, 6, 7, 8, 9, 10, 11, 16]; // Rk, AdjEM->KTV
+                    if (xCell.classList.contains('number') || numericSortCols.includes(n) ) {
+                        if (dir == "asc") { if (xNum > yNum) { shouldSwitch = true; break; } }
+                        else if (dir == "desc") { if (xNum < yNum) { shouldSwitch = true; break; } }
+                    } else {
+                        if (dir == "asc") { if (xContent > yContent) { shouldSwitch = true; break; } }
+                        else if (dir == "desc") { if (xContent < yContent) { shouldSwitch = true; break; } }
+                    }
+                }
+                if (shouldSwitch) { rows[i].parentNode.insertBefore(rows[i + 1], rows[i]); switching = true; switchcount++; }
+            }
+        }
+        document.querySelectorAll('#rankingsTable th').forEach((th, index) => {
             th.addEventListener('click', () => sortTable(index));
         });
     </script>

@@ -253,6 +253,7 @@ def save_coach_data(processed_coach_assignments_df):
                     except sqlite3.IntegrityError: print(f"WARN: UNIQUE constraint fail for coach assign: C:{coach_id} T:{team_tid} S:{season}.")
                     except sqlite3.Error as e: print(f"DB ERROR inserting coach assignment ({coach_name}, {team_tid}, {season}): {e}")
             print(f"Attempted {len(processed_coach_assignments_df)} coach assignments. Inserted/Replaced: {num_inserted}.")
+
     except Exception as e: print(f"GENERAL ERROR in save_coach_data: {e}")
     finally:
         if conn: conn.close()
@@ -607,32 +608,84 @@ def save_coach_head_to_head_stats(coach_h2h_df):
         if conn: conn.close()
 
 def load_season_summary_for_display(season_to_load=None):
-    conn = get_db_connection();
-    if conn is None: return pd.DataFrame()
-    df = pd.DataFrame();
+    """
+    Loads the SeasonTeamSummaries table for display.
+    If season_to_load is None, it tries to load the most recent season.
+    Sorts by adj_em by default.
+    Adds formatted Q1-Q4 record strings, rank, AND coach_name.
+    Returns a tuple: (DataFrame, actual_season_loaded)
+    """
+    conn = get_db_connection()
+    if conn is None:
+        print("ERROR DB_OPS: No connection for load_season_summary_for_display.")
+        return pd.DataFrame(), None
+
+    df_summary = pd.DataFrame()
+    actual_season_loaded = season_to_load
+    
     try:
-        target_season = season_to_load
-        if target_season is None:
+        if actual_season_loaded is None:
             s_df = pd.read_sql_query("SELECT DISTINCT season FROM SeasonTeamSummaries ORDER BY season DESC LIMIT 1", conn)
-            if not s_df.empty: target_season = int(s_df['season'].iloc[0])
-            else: print("No seasons found in SeasonTeamSummaries to display."); return pd.DataFrame()
-        if target_season is None: print("Could not determine a season to load for display."); return pd.DataFrame()
-        target_season = int(target_season)
-        query = "SELECT * FROM SeasonTeamSummaries WHERE season = ? ORDER BY adj_em DESC"
-        df = pd.read_sql_query(query, conn, params=(target_season,))
-        if not df.empty:
-            print(f"Loaded {len(df)} team summaries for season {target_season} for display.")
-            for i in range(1, 5):
-                q_w,q_l,q_rec = f'q{i}_w',f'q{i}_l',f'Q{i}_Record'
-                if q_w in df.columns and q_l in df.columns: df[q_rec] = df[q_w].astype(str) + "-" + df[q_l].astype(str)
-                else: df[q_rec] = "0-0"
-            if 'adj_em' in df.columns: df['rank'] = df['adj_em'].rank(method='min', ascending=False).astype(int)
-            else: df['rank'] = 0
-        else: print(f"No summary data found for season {target_season}.")
-    except Exception as e: print(f"Error loading season summary for display: {e}")
+            if not s_df.empty:
+                actual_season_loaded = int(s_df['season'].iloc[0])
+            else:
+                print("INFO DB_OPS: No seasons found in SeasonTeamSummaries to display.")
+                return pd.DataFrame(), None
+        
+        if actual_season_loaded is None:
+             print("INFO DB_OPS: Could not determine a season to load for display.")
+             return pd.DataFrame(), None
+
+        actual_season_loaded = int(actual_season_loaded)
+        
+        # Query to get season summaries and join with coach info
+        # Using LEFT JOINs so teams without coaches are still included
+        query = f"""
+        SELECT ss.*, c.coach_name,ca.coach_id
+        FROM SeasonTeamSummaries ss
+        LEFT JOIN CoachAssignments ca ON ss.season = ca.season AND ss.team_tid = ca.team_tid
+        LEFT JOIN Coaches c ON ca.coach_id = c.coach_id
+        WHERE ss.season = ?
+        ORDER BY ss.adj_em DESC
+        """
+        df_summary = pd.read_sql_query(query, conn, params=(actual_season_loaded,))
+        
+        if not df_summary.empty:
+            print(f"Loaded {len(df_summary)} team summaries (with coach names) for season {actual_season_loaded} for display.")
+            for i in range(1, 5): # Q-Record Formatting
+                q_w_col, q_l_col, q_rec_col = f'q{i}_w', f'q{i}_l', f'Q{i}_Record'
+                if q_w_col in df_summary.columns and q_l_col in df_summary.columns:
+                    df_summary[q_w_col] = pd.to_numeric(df_summary[q_w_col], errors='coerce').fillna(0).astype(int)
+                    df_summary[q_l_col] = pd.to_numeric(df_summary[q_l_col], errors='coerce').fillna(0).astype(int)
+                    df_summary[q_rec_col] = df_summary[q_w_col].astype(str) + "-" + df_summary[q_l_col].astype(str)
+                else: df_summary[q_rec_col] = "0-0"
+            
+            if 'adj_em' in df_summary.columns: # Rank Calculation
+                df_summary['adj_em'] = pd.to_numeric(df_summary['adj_em'], errors='coerce')
+                if df_summary['adj_em'].notna().any():
+                    df_summary['rank'] = df_summary['adj_em'].rank(method='min', ascending=False).fillna(0).astype(int)
+                else: df_summary['rank'] = 0
+            else: df_summary['rank'] = 0
+            
+            if 'coach_name' not in df_summary.columns: # Ensure column exists even if all are NULL from join
+                df_summary['coach_name'] = None
+            df_summary['coach_name'] = df_summary['coach_name'].fillna("N/A")
+
+        else:
+            print(f"INFO DB_OPS: No summary data found for season {actual_season_loaded}.")
+            
+    except Exception as e:
+        print(f"ERROR DB_OPS: Error loading season summary for display: {e}")
+        df_summary = pd.DataFrame()
+        actual_season_loaded = target_season # Revert to initially targeted season on error for label
+        if actual_season_loaded is None and conn:
+            try:
+                s_df_fallback = pd.read_sql_query("SELECT DISTINCT season FROM SeasonTeamSummaries ORDER BY season DESC LIMIT 1", conn)
+                if not s_df_fallback.empty: actual_season_loaded = int(s_df_fallback['season'].iloc[0])
+            except: pass # Ignore error in fallback during error handling
     finally:
         if conn: conn.close()
-    return df
+    return df_summary, actual_season_loaded
 def save_postseason_results(processed_postseason_df, season_to_clear):
     """Saves processed postseason results. Deletes for the given season then appends."""
     if processed_postseason_df.empty:
@@ -697,3 +750,568 @@ def load_postseason_results_for_season(season_to_load):
     finally:
         if conn: conn.close()
     return df
+def load_team_season_details(team_tid_to_load, season_to_load):
+    conn = get_db_connection()
+    if conn is None:
+        print("ERROR DB_OPS: No connection for load_team_season_details.")
+        return None, None
+
+    target_season_for_return = None
+    team_details_dict = None
+    try:
+        season_val = int(season_to_load)
+        tid_val = int(team_tid_to_load)
+        target_season_for_return = season_val
+
+        query = f"""
+        SELECT 
+            ss.*, 
+            t.name AS team_table_name,
+            t.region AS team_table_region,
+            t.full_name AS team_table_full_name,
+            c.coach_name, 
+            ca.coach_id
+        FROM SeasonTeamSummaries ss
+        JOIN Teams t ON ss.team_tid = t.team_tid
+        LEFT JOIN CoachAssignments ca ON ss.season = ca.season AND ss.team_tid = ca.team_tid
+        LEFT JOIN Coaches c ON ca.coach_id = c.coach_id
+        WHERE ss.season = ? AND ss.team_tid = ?
+        """
+        details_df = pd.read_sql_query(query, conn, params=(season_val, tid_val))
+        
+        if not details_df.empty:
+            print(f"INFO DB_OPS: Found data for team {tid_val}, season {season_val}. Processing...")
+            
+            team_detail_series = details_df.iloc[0].copy()
+            
+            # Convert Series to dict first, then work with dict values
+            team_details_dict = team_detail_series.to_dict()
+
+            # Ensure desired name fields are present
+            team_details_dict['full_name'] = team_details_dict.get('team_table_full_name', team_details_dict.get('team_abbrev', 'Unknown Team'))
+            team_details_dict['name'] = team_details_dict.get('team_table_name', team_details_dict.get('team_abbrev', 'Unknown Team'))
+            team_details_dict['region'] = team_details_dict.get('team_table_region', '')
+
+            # Coach name handling
+            coach_name_val = team_details_dict.get('coach_name')
+            team_details_dict['coach_name'] = "N/A" if pd.isna(coach_name_val) else str(coach_name_val)
+            
+            # Coach ID handling
+            coach_id_val = team_details_dict.get('coach_id')
+            if pd.isna(coach_id_val):
+                team_details_dict['coach_id'] = None
+            else:
+                try: team_details_dict['coach_id'] = int(coach_id_val)
+                except (ValueError, TypeError): team_details_dict['coach_id'] = None
+
+            # Format Quadrant Records
+            for i in range(1, 5):
+                q_w_col, q_l_col, q_rec_col = f'q{i}_w', f'q{i}_l', f'Q{i}_Record'
+                
+                w_val = team_details_dict.get(q_w_col)
+                l_val = team_details_dict.get(q_l_col)
+                
+                # Convert to numeric, default to 0 if NaN or conversion error
+                w = 0
+                if pd.notna(w_val):
+                    try: w = int(pd.to_numeric(w_val))
+                    except (ValueError, TypeError): w = 0 # default if not convertible
+                
+                l = 0
+                if pd.notna(l_val):
+                    try: l = int(pd.to_numeric(l_val))
+                    except (ValueError, TypeError): l = 0 # default if not convertible
+                
+                team_details_dict[q_rec_col] = f"{w}-{l}"
+            
+            # Rank
+            rank_val = team_details_dict.get('rank_adj_em')
+            if pd.notna(rank_val):
+                try: team_details_dict['rank_adj_em'] = int(rank_val)
+                except (ValueError, TypeError): team_details_dict['rank_adj_em'] = 0
+            else: # If rank_val is None/NaN or key doesn't exist
+                team_details_dict['rank_adj_em'] = 0
+            
+            print(f"INFO DB_OPS: Successfully processed details for team {tid_val}, season {season_val}.")
+            return team_details_dict, target_season_for_return
+        else:
+            print(f"INFO DB_OPS: No summary data found for team {tid_val}, season {season_val} in DB query.")
+            return None, target_season_for_return
+            
+    except Exception as e:
+        print(f"ERROR DB_OPS: Error in load_team_season_details for T:{team_tid_to_load} S:{season_to_load}: {e}")
+        final_season_label = season_to_load if season_to_load is not None else "Unknown"
+        return None, final_season_label
+    finally:
+        if conn: conn.close()
+
+    return None, season_to_load if season_to_load is not None else None
+def load_team_game_log(team_tid_to_load, season_to_load):
+    """
+    Loads the game log for a specific team and season.
+    Includes actual results for played games and predictions for future games.
+    """
+    conn = get_db_connection()
+    if conn is None: return pd.DataFrame()
+
+    game_log_df = pd.DataFrame()
+    try:
+        season_val = int(season_to_load)
+        tid_val = int(team_tid_to_load)
+        
+        # Query GameTeamStats
+        # Ensure all necessary columns including prediction columns are selected
+        query = f"""
+        SELECT gid, season, team_tid, opponent_tid, team_abbrev, opponent_abbrev, 
+               location, overtimes, is_played, game_date, game_time, 
+               is_national_playoffs, is_conf_tournament, team_game_num_in_season,
+               team_score_official, opponent_score_official, win, loss, game_quadrant,
+               pred_win_prob_team, pred_margin_team, pred_score_team, pred_score_opponent
+        FROM GameTeamStats
+        WHERE season = ? AND team_tid = ?
+        ORDER BY team_game_num_in_season ASC 
+        """
+        # Sorting by team_game_num_in_season will give chronological order
+        # Or sort by game_date if it's reliably populated and sortable
+        
+        game_log_df = pd.read_sql_query(query, conn, params=(season_val, tid_val))
+        
+        if not game_log_df.empty:
+            print(f"Loaded {len(game_log_df)} games for team {tid_val}, season {season_val}.")
+            # Ensure boolean columns are treated as boolean for template logic if needed
+            for bool_col in ['is_played', 'is_national_playoffs', 'is_conf_tournament']:
+                if bool_col in game_log_df.columns:
+                    game_log_df[bool_col] = game_log_df[bool_col].astype(bool)
+        else:
+            print(f"No game log data found for team {tid_val}, season {season_val}.")
+            
+    except Exception as e:
+        print(f"Error loading game log for team {team_tid_to_load}, season {season_to_load}: {e}")
+    finally:
+        if conn: conn.close()
+    return game_log_df
+
+
+# --- Function to load historical summary for a single team ---
+def load_team_historical_summary(team_tid_to_load):
+    conn = get_db_connection()
+    if conn is None: return pd.DataFrame()
+
+    history_df = pd.DataFrame()
+    try:
+        tid_val = int(team_tid_to_load)
+        query = f"""
+        SELECT 
+            ss.season, ss.wins, ss.losses, ss.win_pct, 
+            ss.adj_em, ss.rank_adj_em, 
+            ss.nt_result, ss.nit_result, ss.nt_seed, ss.nit_seed,
+            c.coach_name, ca.coach_id 
+        FROM SeasonTeamSummaries ss
+        LEFT JOIN CoachAssignments ca ON ss.season = ca.season AND ss.team_tid = ca.team_tid
+        LEFT JOIN Coaches c ON ca.coach_id = c.coach_id
+        WHERE ss.team_tid = ?
+        ORDER BY ss.season DESC
+        """
+        history_df = pd.read_sql_query(query, conn, params=(tid_val,))
+        
+        if not history_df.empty:
+            print(f"Loaded {len(history_df)} historical seasons for team {tid_val}.")
+            
+            # Fill NaNs for display consistency
+            for col in ['nt_result', 'nit_result', 'coach_name']:
+                if col not in history_df.columns: history_df[col] = "N/A" # Add column if missing
+                history_df[col] = history_df[col].fillna("N/A")
+            
+            for col in ['nt_seed', 'nit_seed', 'coach_id']: # Ensure these are Int64 to handle potential pd.NA
+                 if col not in history_df.columns: history_df[col] = pd.NA
+                 history_df[col] = pd.to_numeric(history_df[col], errors='coerce').astype('Int64')
+        else:
+            print(f"No historical summary data found for team {tid_val}.")
+            
+    except Exception as e:
+        print(f"Error loading historical summary for team {team_tid_to_load}: {e}")
+    finally:
+        if conn: conn.close()
+    return history_df
+def load_team_historical_summary(team_tid_to_load):
+    """
+    Loads key historical season summaries for a specific team, including coach for each season.
+    """
+    conn = get_db_connection()
+    if conn is None: return pd.DataFrame()
+
+    history_df = pd.DataFrame()
+    try:
+        tid_val = int(team_tid_to_load)
+        
+        # Query to get season summaries and join with coach info
+        query = f"""
+        SELECT 
+            ss.season, ss.wins, ss.losses, ss.win_pct, 
+            ss.adj_em, ss.rank_adj_em, 
+            ss.nt_result, ss.nit_result, ss.nt_seed, ss.nit_seed,
+            c.coach_name
+        FROM SeasonTeamSummaries ss
+        LEFT JOIN CoachAssignments ca ON ss.season = ca.season AND ss.team_tid = ca.team_tid
+        LEFT JOIN Coaches c ON ca.coach_id = c.coach_id
+        WHERE ss.team_tid = ?
+        ORDER BY ss.season DESC
+        """
+        history_df = pd.read_sql_query(query, conn, params=(tid_val,))
+        
+        if not history_df.empty:
+            print(f"Loaded {len(history_df)} historical seasons for team {tid_val}.")
+            # Fill NaNs for display consistency
+            for col in ['nt_result', 'nit_result', 'coach_name']: # Added coach_name
+                if col in history_df.columns:
+                    history_df[col] = history_df[col].fillna("N/A")
+            for col in ['nt_seed', 'nit_seed']: # Seeds to 0 or keep as nullable int
+                 if col in history_df.columns:
+                     history_df[col] = pd.to_numeric(history_df[col], errors='coerce').astype('Int64').fillna(pd.NA) # Use pd.NA for nullable int
+
+        else:
+            print(f"No historical summary data found for team {tid_val}.")
+            
+    except Exception as e:
+        print(f"Error loading historical summary for team {team_tid_to_load}: {e}")
+    finally:
+        if conn: conn.close()
+    return history_df
+def load_coach_info(coach_id_to_load):
+    """Loads basic information for a specific coach."""
+    conn = get_db_connection()
+    if conn is None: return None
+    coach_info = None
+    try:
+        cid_val = int(coach_id_to_load)
+        query = "SELECT coach_id, coach_name FROM Coaches WHERE coach_id = ?"
+        coach_df = pd.read_sql_query(query, conn, params=(cid_val,))
+        if not coach_df.empty:
+            coach_info = coach_df.iloc[0].to_dict()
+            print(f"Loaded info for coach_id {cid_val}: {coach_info.get('coach_name')}")
+        else:
+            print(f"No coach found with coach_id {cid_val}")
+    except Exception as e:
+        print(f"Error loading info for coach_id {coach_id_to_load}: {e}")
+    finally:
+        if conn: conn.close()
+    return coach_info
+
+def load_coach_career_stats_by_id(coach_id_to_load):
+    """Loads career stats for a specific coach."""
+    conn = get_db_connection()
+    if conn is None: return None
+    career_stats = None
+    try:
+        cid_val = int(coach_id_to_load)
+        query = "SELECT * FROM CoachCareerStats WHERE coach_id = ?"
+        career_df = pd.read_sql_query(query, conn, params=(cid_val,))
+        if not career_df.empty:
+            career_stats = career_df.iloc[0].to_dict()
+            # Convert potential float NaNs for integer counts to 0 for display
+            count_cols = [col for col in career_df.columns if 'total_' in col or 'career_q' in col or '_appearances' in col or '_championships' in col or 'seasons_coached' in col or 'teams_coached_count' in col]
+            for col in count_cols:
+                if col in career_stats and pd.isna(career_stats[col]):
+                    career_stats[col] = 0
+                elif col in career_stats: # Ensure integer type if not NaN
+                    career_stats[col] = int(career_stats[col])
+
+            print(f"Loaded career stats for coach_id {cid_val}")
+        else:
+            print(f"No career stats found for coach_id {cid_val}")
+    except Exception as e:
+        print(f"Error loading career stats for coach_id {coach_id_to_load}: {e}")
+    finally:
+        if conn: conn.close()
+    return career_stats
+
+def load_coach_seasons_stats_by_id(coach_id_to_load):
+    conn = get_db_connection()
+    if conn is None: return pd.DataFrame()
+
+    seasons_df = pd.DataFrame()
+    try:
+        cid_val = int(coach_id_to_load)
+        
+        # Select specific columns from SeasonTeamSummaries to avoid duplicates after JOIN
+        # and alias them if their base names might already exist in CoachSeasonStats (though they shouldn't for these specific stats)
+        query = f"""
+        SELECT 
+            css.*, 
+            sts.avg_opp_adj_em AS team_avg_opp_adj_em, /* Alias to avoid potential conflict if css had it */
+            sts.luck_adj AS team_luck_adj,
+            sts.wab AS team_wab,
+            sts.num_cpr AS team_num_cpr,
+            sts.nt_seed, sts.nt_result, 
+            sts.nit_seed, sts.nit_result
+        FROM CoachSeasonStats css
+        LEFT JOIN SeasonTeamSummaries sts 
+            ON css.season = sts.season AND css.team_tid = sts.team_tid
+        WHERE css.coach_id = ? 
+        ORDER BY css.season DESC
+        """
+        seasons_df = pd.read_sql_query(query, conn, params=(cid_val,))
+        
+        if not seasons_df.empty:
+            print(f"Loaded {len(seasons_df)} seasonal records (joined) for coach_id {cid_val}")
+            
+            # Columns from CoachSeasonStats for Q-Record formatting
+            for i in range(1, 5):
+                q_w_col, q_l_col, q_rec_col = f'q{i}_w', f'q{i}_l', f'Q{i}_Record_CSS'
+                if q_w_col in seasons_df.columns and q_l_col in seasons_df.columns:
+                    seasons_df[q_w_col] = pd.to_numeric(seasons_df[q_w_col], errors='coerce').fillna(0).astype(int)
+                    seasons_df[q_l_col] = pd.to_numeric(seasons_df[q_l_col], errors='coerce').fillna(0).astype(int)
+                    seasons_df[q_rec_col] = seasons_df[q_w_col].astype(str) + "-" + seasons_df[q_l_col].astype(str)
+                else:
+                    seasons_df[q_rec_col] = "0-0"
+
+            # Fill NaNs for the joined columns (now aliased if necessary)
+            # These are team-level stats for the season the coach was there
+            team_level_text_cols = ['nt_result', 'nit_result']
+            team_level_nullable_int_cols = ['nt_seed', 'nit_seed']
+            team_level_float_cols = ['team_avg_opp_adj_em', 'team_luck_adj', 'team_wab']
+            team_level_count_cols = ['team_num_cpr']
+
+
+            for col in team_level_text_cols:
+                if col in seasons_df.columns: seasons_df[col] = seasons_df[col].fillna("N/A")
+                else: seasons_df[col] = "N/A"
+            for col in team_level_nullable_int_cols:
+                if col in seasons_df.columns: seasons_df[col] = pd.to_numeric(seasons_df[col], errors='coerce').astype('Int64')
+                else: seasons_df[col] = pd.NA # Use pd.NA for missing Int64
+            for col in team_level_float_cols:
+                if col in seasons_df.columns: seasons_df[col] = pd.to_numeric(seasons_df[col], errors='coerce') # Keep as float, allow NaN
+                else: seasons_df[col] = np.nan
+            for col in team_level_count_cols:
+                if col in seasons_df.columns: seasons_df[col] = pd.to_numeric(seasons_df[col], errors='coerce').fillna(0).astype(int)
+                else: seasons_df[col] = 0
+        else:
+            print(f"No seasonal stats found for coach_id {cid_val}")
+            
+    except sqlite3.Error as sql_e:
+        print(f"DATABASE SQL ERROR in load_coach_seasons_stats_by_id for coach_id {coach_id_to_load}: {sql_e}")
+    except Exception as e:
+        print(f"GENERAL ERROR loading seasonal stats for coach_id {coach_id_to_load}: {e}")
+    finally:
+        if conn: conn.close()
+    return seasons_df
+def load_all_coaches_with_enhanced_career_stats():
+    """
+    Loads all coaches with their existing career stats from CoachCareerStats,
+    and then calculates additional career postseason metrics and total GTs
+    by processing their associated seasonal stats from CoachSeasonStats (joined with SeasonTeamSummaries).
+    """
+    conn = get_db_connection()
+    if conn is None:
+        print("ERROR DB_OPS: No connection for load_all_coaches_with_enhanced_career_stats.")
+        return []
+
+    coaches_career_list = []
+    try:
+        # Step 1: Get all coaches and their existing career stats
+        # Using LEFT JOIN to ensure all coaches from Coaches table are included,
+        # even if they don't have an entry in CoachCareerStats yet.
+        query_career = """
+        SELECT 
+            c.coach_id, 
+            c.coach_name, 
+            ccs.seasons_coached,
+            ccs.teams_coached_count,
+            ccs.total_games_coached,
+            ccs.total_wins,
+            ccs.total_losses,
+            ccs.career_win_pct,
+            ccs.career_q1_w, ccs.career_q1_l, ccs.career_q2_w, ccs.career_q2_l,
+            ccs.career_q3_w, ccs.career_q3_l, ccs.career_q4_w, ccs.career_q4_l,
+            ccs.career_avg_team_adj_em,
+            ccs.career_avg_team_rank,
+            ccs.career_total_recruits,
+            ccs.career_avg_recruit_ovr_of_classes,
+            ccs.career_total_5_stars, ccs.career_total_4_stars, ccs.career_total_3_stars, /* Added 3 stars */
+            ccs.career_avg_score_ktv
+            /* Add other existing fields from CoachCareerStats as needed */
+        FROM Coaches c
+        LEFT JOIN CoachCareerStats ccs ON c.coach_id = ccs.coach_id
+        ORDER BY c.coach_name;
+        """
+        all_coaches_career_df = pd.read_sql_query(query_career, conn)
+        
+        if all_coaches_career_df.empty:
+            print("INFO DB_OPS: No coaches found in Coaches table.")
+            return []
+
+        # Step 2: Get all relevant seasonal data for all coaches in one go
+        # This seasonal data should include team's postseason results and num_gt
+        query_seasonal = """
+        SELECT 
+            css.coach_id, 
+            css.num_gt,        /* From CoachSeasonStats */
+            sts.nt_result,     /* From SeasonTeamSummaries */
+            sts.nit_result     /* From SeasonTeamSummaries */
+        FROM CoachSeasonStats css
+        LEFT JOIN SeasonTeamSummaries sts 
+            ON css.season = sts.season AND css.team_tid = sts.team_tid
+        """
+        all_seasonal_stats_df = pd.read_sql_query(query_seasonal, conn)
+
+        if all_seasonal_stats_df.empty:
+            print("WARNING DB_OPS: No seasonal stats found in CoachSeasonStats to calculate detailed career postseason/GT metrics.")
+        
+        coaches_career_list = all_coaches_career_df.to_dict(orient='records')
+
+        for coach_dict in coaches_career_list:
+            coach_id = coach_dict.get('coach_id')
+            if coach_id is None: continue # Should not happen if joining from Coaches table
+
+            # Initialize new calculated career counters
+            coach_dict['career_nt_appearances_calc'] = 0
+            coach_dict['career_nit_appearances_calc'] = 0
+            coach_dict['career_nt_champs_calc'] = 0
+            coach_dict['career_final_fours_calc'] = 0
+            coach_dict['career_championship_games_calc'] = 0 # NT Championship Games
+            coach_dict['career_total_gt_calc'] = 0
+
+            if not all_seasonal_stats_df.empty:
+                coach_seasons_data = all_seasonal_stats_df[all_seasonal_stats_df['coach_id'] == coach_id]
+                
+                if not coach_seasons_data.empty:
+                    # Calculate total grad transfers
+                    coach_dict['career_total_gt_calc'] = int(pd.to_numeric(coach_seasons_data['num_gt'], errors='coerce').fillna(0).sum())
+                    
+                    # Calculate postseason achievements
+                    for _, season_row in coach_seasons_data.iterrows():
+                        nt_res = season_row.get('nt_result')
+                        nit_res = season_row.get('nit_result')
+
+                        if nt_res and nt_res != 'N/A' and nt_res != 0: # Check for 0 if it was a fillna value
+                            coach_dict['career_nt_appearances_calc'] += 1
+                            if nt_res == 'Champion':
+                                coach_dict['career_nt_champs_calc'] += 1
+                            if nt_res in ['Champion', 'Championship Game']: # Assuming 'Championship Game' means runner-up or made it there
+                                coach_dict['career_championship_games_calc'] += 1
+                            if nt_res in ['Champion', 'Championship Game', 'Final Four']:
+                                coach_dict['career_final_fours_calc'] += 1
+                            # Elite 8s can be added similarly if result strings match
+                        
+                        if nit_res and nit_res != 'N/A' and nit_res != 0:
+                            coach_dict['career_nit_appearances_calc'] += 1
+                            # Add NIT Champion count if needed, same way as NT champs
+            
+            # Ensure existing career stats (that might be NaN from LEFT JOIN) have defaults
+            # These are from the CoachCareerStats table itself
+            existing_career_counts = [
+                'seasons_coached', 'teams_coached_count', 'total_games_coached',
+                'total_wins', 'total_losses',
+                'career_q1_w', 'career_q1_l', 'career_q2_w', 'career_q2_l',
+                'career_q3_w', 'career_q3_l', 'career_q4_w', 'career_q4_l',
+                'career_total_recruits', 'career_total_5_stars', 'career_total_4_stars', 'career_total_3_stars'
+            ]
+            existing_career_floats = [
+                'career_win_pct', 'career_avg_team_adj_em', 'career_avg_team_rank',
+                'career_avg_recruit_ovr_of_classes', 'career_avg_score_ktv'
+            ]
+
+            for col in existing_career_counts:
+                if pd.isna(coach_dict.get(col)):
+                    coach_dict[col] = 0
+            for col in existing_career_floats:
+                if pd.isna(coach_dict.get(col)):
+                    coach_dict[col] = 0.0 # Or np.nan if you prefer for averages
+
+        print(f"INFO DB_OPS: Loaded and enhanced career stats for {len(coaches_career_list)} coaches.")
+
+    except sqlite3.Error as sql_e:
+        print(f"DATABASE SQL ERROR in load_all_coaches_with_enhanced_career_stats: {sql_e}")
+    except Exception as e:
+        print(f"GENERAL ERROR in load_all_coaches_with_enhanced_career_stats: {e}")
+    finally:
+        if conn: conn.close()
+    
+    return coaches_career_list
+def load_recruiting_rankings_for_class_year(class_year_to_load, default_sort_col='score_ktv', sort_ascending=False):
+    """
+    Loads team summaries for the effective playing season corresponding to a 
+    recruiting class year, focusing on recruiting metrics and including coach info.
+    Returns a DataFrame sorted by the specified recruiting score and the effective_season loaded.
+    """
+    conn = get_db_connection()
+    if conn is None:
+        print("ERROR DB_OPS: No connection for load_recruiting_rankings_for_class_year.")
+        return pd.DataFrame(), None
+
+    recruiting_rankings_df = pd.DataFrame()
+    effective_season_loaded = None
+
+    if class_year_to_load is None:
+        print("INFO DB_OPS: No class_year_to_load specified for recruiting rankings.")
+        # Optionally, determine the latest possible class year based on max(effective_season) - 1
+        # For now, returning empty if no specific class year.
+        return pd.DataFrame(), None
+        
+    try:
+        class_year = int(class_year_to_load)
+        effective_season_loaded = class_year + 1 # Recruits from class X play in season X+1
+
+        # Select all relevant columns from SeasonTeamSummaries and join for coach name
+        # Ensure all recruiting columns (num_X_star, num_gt, num_juco, num_cpr, score_X) are in SeasonTeamSummaries
+        query = f"""
+        SELECT 
+            ss.season, ss.team_tid, ss.team_abbrev, ss.cid,
+            c.coach_name, ca.coach_id, /* Coach info for that effective season */
+            ss.num_recruits, ss.avg_recruit_ovr, 
+            ss.num_5_star, ss.num_4_star, ss.num_3_star, ss.num_2_star, ss.num_1_star,
+            ss.num_gt, ss.num_juco, ss.num_cpr,
+            ss.score_ktv, ss.score_onz, ss.score_nspn, ss.score_storms, ss.score_248sports
+            /* Add any other columns from SeasonTeamSummaries you might want on the recruiting rank page */
+        FROM SeasonTeamSummaries ss
+        LEFT JOIN CoachAssignments ca ON ss.season = ca.season AND ss.team_tid = ca.team_tid
+        LEFT JOIN Coaches c ON ca.coach_id = c.coach_id
+        WHERE ss.season = ? 
+        """
+        
+        # Sorting logic
+        if default_sort_col and isinstance(default_sort_col, str):
+            # Validate sort_col against typical SeasonTeamSummaries columns to prevent SQL injection
+            # For simplicity here, assuming default_sort_col is safe.
+            # In a production system, validate it against a list of allowed sort columns.
+            query += f" ORDER BY ss.{default_sort_col} {'ASC' if sort_ascending else 'DESC'}"
+        else: # Default sort if col is invalid or None
+            query += " ORDER BY ss.score_ktv DESC"
+
+
+        recruiting_rankings_df = pd.read_sql_query(query, conn, params=(effective_season_loaded,))
+        
+        if not recruiting_rankings_df.empty:
+            print(f"INFO DB_OPS: Loaded {len(recruiting_rankings_df)} team recruiting summaries for class year {class_year} (effective season {effective_season_loaded}).")
+            
+            # Add a rank column based on the sort
+            # If default_sort_col was valid and used for sorting
+            if default_sort_col in recruiting_rankings_df.columns:
+                recruiting_rankings_df['rank'] = recruiting_rankings_df[default_sort_col].rank(method='min', ascending=sort_ascending).astype(int)
+            else: # Fallback rank if sort column wasn't valid (should not happen if validated)
+                recruiting_rankings_df['rank'] = range(1, len(recruiting_rankings_df) + 1)
+
+            # Ensure coach_name exists and fill NaNs
+            if 'coach_name' not in recruiting_rankings_df.columns:
+                recruiting_rankings_df['coach_name'] = "N/A"
+            else:
+                recruiting_rankings_df['coach_name'] = recruiting_rankings_df['coach_name'].fillna("N/A")
+            
+            if 'coach_id' not in recruiting_rankings_df.columns:
+                recruiting_rankings_df['coach_id'] = None
+            else:
+                recruiting_rankings_df['coach_id'] = pd.to_numeric(recruiting_rankings_df['coach_id'], errors='coerce').astype('Int64')
+
+        else:
+            print(f"INFO DB_OPS: No recruiting summary data found for class year {class_year} (effective season {effective_season_loaded}).")
+            
+    except sqlite3.Error as sql_e:
+        print(f"DATABASE SQL ERROR in load_recruiting_rankings_for_class_year (class {class_year_to_load}): {sql_e}")
+        effective_season_loaded = None # Indicate failure
+    except Exception as e:
+        print(f"GENERAL ERROR in load_recruiting_rankings_for_class_year (class {class_year_to_load}): {e}")
+        effective_season_loaded = None # Indicate failure
+    finally:
+        if conn: conn.close()
+        
+    return recruiting_rankings_df, effective_season_loaded

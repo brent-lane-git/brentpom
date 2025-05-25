@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title if title else "Team Page - BrentPom" }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    {% include 'header.html' %} {# Assumes active_tab, all_available_seasons etc. are passed #}
+
+    <div class="container">
+        {% if team_details %}
+            {# ----- TEAM HEADER ----- #}
+            <div class="team-page-header-info">
+                <h2 class="page-title" style="margin-bottom: 5px;">
+                    {{ team_details.get('team_abbrev', team_abbrev_for_title) }} -
+                    {{ team_details.get('full_name', team_details.get('name', 'Unknown Team')) }}
+                    <span style="font-size: 0.7em; color: #555;">
+                        (<a href="{{ url_for('conferences_page', season_year=current_season_displayed if current_season_displayed != 'N/A' else None) }}" class="team-link">
+                           {{ cid_to_conf_abbrev_map.get(team_details.get('cid')|int, team_details.get('cid') if team_details.get('cid') != -999 else 'N/A') }}
+                        </a>)
+                    </span>
+                </h2>
+                <p>
+                    <strong>Season:</strong> {{ current_season_displayed }} |
+                    <strong>Record:</strong> {{ team_details.get('wins',0) }}-{{ team_details.get('losses',0) }} ({{ "%.3f"|format(team_details.get('win_pct', 0.0)) }}) |
+                    <strong>Coach:</strong>
+                    {% set current_coach_id = team_details.get('coach_id') %}
+                    {% set current_coach_name = team_details.get('coach_name', 'N/A') %}
+                    {% if current_coach_id is not none and current_coach_id != 0 and current_coach_name != 'N/A' %}
+                        <a href="{{ url_for('coach_detail_page', coach_id=current_coach_id, season_year=current_season_displayed if current_season_displayed != 'N/A' else None) }}" class="coach-link">
+                            {{ current_coach_name }}
+                        </a>
+                    {% else %}
+                        {{ current_coach_name }}
+                    {% endif %}
+                </p>
+            </div>
+            
+            <div class="team-page-postseason-info">
+            {% set nt_res = team_details.get('nt_result') %}{% set nt_s = team_details.get('nt_seed') %}
+            {% set nit_res = team_details.get('nit_result') %}{% set nit_s = team_details.get('nit_seed') %}
+            {% if nt_res and nt_res != 'N/A' and nt_res != 0 %}<span class="nt-text">NT {% if nt_s is not none and nt_s != 0 %}{{ nt_s|int }}{% endif %} - {% if nt_res == 'Champion' %}🏆{% else %}{{ nt_res }}{% endif %}</span>
+            {% elif nit_res and nit_res != 'N/A' and nit_res != 0 %}<span class="nit-text">NIT {% if nit_s is not none and nit_s != 0 %}{{ nit_s|int }}{% endif %} - {% if nit_res == 'NIT Champion' %}🍩{% else %}{{ nit_res }}{% endif %}</span>
+            {% else %}<span style="font-style: italic; color: #888;">No Postseason Result for {{current_season_displayed}}</span>{% endif %}
+            </div>
+
+            {# ----- 2x2 GRID FOR STATS ----- #}
+            <div class="stats-grid-container">
+                <div class="stat-block grid-item">
+                    <h3>Key Metrics</h3>
+                    <div class="stat-grid">
+                        <div class="stat-item"><strong>AdjEM:</strong> {{ "%.2f"|format(team_details.get('adj_em')) if team_details.get('adj_em') is not none else 'N/A' }} (Rank: {{ team_details.get('rank_adj_em', 'N/A') }})</div>
+                        <div class="stat-item"><strong>AdjO:</strong> {{ "%.1f"|format(team_details.get('adj_o')) if team_details.get('adj_o') is not none else 'N/A' }}</div>
+                        <div class="stat-item"><strong>AdjD:</strong> {{ "%.1f"|format(team_details.get('adj_d')) if team_details.get('adj_d') is not none else 'N/A' }}</div>
+                        <div class="stat-item"><strong>Luck:</strong> {{ "%.2f"|format(team_details.get('luck_adj')) if team_details.get('luck_adj') is not none else 'N/A' }}</div>
+                        <div class="stat-item"><strong>SOS (AdjEM):</strong> {{ "%.2f"|format(team_details.get('avg_opp_adj_em')) if team_details.get('avg_opp_adj_em') is not none else 'N/A' }}</div>
+                        <div class="stat-item"><strong>SOS (BCS):</strong> {{ "%.4f"|format(team_details.get('sos_bcs')) if team_details.get('sos_bcs') is not none else 'N/A' }}</div>
+                        <div class="stat-item"><strong>WAB:</strong> {{ "%.2f"|format(team_details.get('wab')) if team_details.get('wab') is not none else 'N/A' }}</div>
+                        <div class="stat-item"><strong>Tempo:</strong> {{ "%.1f"|format(team_details.get('avg_tempo')) if team_details.get('avg_tempo') is not none else 'N/A' }}</div>
+                    </div>
+                </div>
+
+                <div class="stat-block grid-item">
+                    <h3>Four Factors & Shooting</h3>
+                    <div class="stat-grid">
+                        <div class="stat-item"><strong>eFG%:</strong> {{ "%.3f"|format(team_details.get('off_efg_pct')) if team_details.get('off_efg_pct') is not none else 'N/A' }} | {{ "%.3f"|format(team_details.get('def_efg_pct')) if team_details.get('def_efg_pct') is not none else 'N/A' }}</div>
+                        <div class="stat-item"><strong>TOV%:</strong> {{ "%.1f"|format(team_details.get('off_tov_pct', 0) * 100) if team_details.get('off_tov_pct') is not none else 'N/A' }}% | {{ "%.1f"|format(team_details.get('def_tov_pct', 0) * 100) if team_details.get('def_tov_pct') is not none else 'N/A' }}%</div>
+                        <div class="stat-item"><strong>ORB%:</strong> {{ "%.1f"|format(team_details.get('off_orb_pct', 0) * 100) if team_details.get('off_orb_pct') is not none else 'N/A' }}% | {{ "%.1f"|format(team_details.get('def_opp_orb_pct', 0) * 100) if team_details.get('def_opp_orb_pct') is not none else 'N/A' }}% (Opp)</div>
+                        <div class="stat-item"><strong>FT Rate:</strong> {{ "%.3f"|format(team_details.get('off_ft_rate')) if team_details.get('off_ft_rate') is not none else 'N/A' }} | {{ "%.3f"|format(team_details.get('def_ft_rate')) if team_details.get('def_ft_rate') is not none else 'N/A' }} (Opp)</div>
+                        <div class="stat-item"><strong>3P Rate:</strong>{{ "%.3f"|format(team_details.get('team_3p_rate')) if team_details.get('team_3p_rate') is not none else 'N/A' }} | {{ "%.3f"|format(team_details.get('opp_3p_rate')) if team_details.get('opp_3p_rate') is not none else 'N/A' }} (Opp)</div>
+                        <div class="stat-item"><strong>3P%:</strong>{{ "%.3f"|format(team_details.get('team_3p_pct')) if team_details.get('team_3p_pct') is not none else 'N/A' }} | {{ "%.3f"|format(team_details.get('opp_3p_pct')) if team_details.get('opp_3p_pct') is not none else 'N/A' }} (Opp)</div>
+                        <div class="stat-item"><strong>2P%:</strong>{{ "%.3f"|format(team_details.get('team_2p_pct')) if team_details.get('team_2p_pct') is not none else 'N/A' }} | {{ "%.3f"|format(team_details.get('opp_2p_pct')) if team_details.get('opp_2p_pct') is not none else 'N/A' }} (Opp)</div>
+                    </div>
+                </div>
+
+                <div class="stat-block grid-item">
+                    <h3>Quadrant Records ({{current_season_displayed}})</h3>
+                    <div class="quadrant-summary">
+                        <p>Q1: <strong>{{ team_details.get('Q1_Record', '0-0') }}</strong></p>
+                        <p>Q2: <strong>{{ team_details.get('Q2_Record', '0-0') }}</strong></p>
+                        <p>Q3: <strong>{{ team_details.get('Q3_Record', '0-0') }}</strong></p>
+                        <p>Q4: <strong>{{ team_details.get('Q4_Record', '0-0') }}</strong></p>
+                    </div>
+                    {# --- NEW: Key Games Section --- #}
+                    {% if key_games %}
+                        <h4 style="margin-top: 20px; margin-bottom: 8px; font-size: 0.95em; color: #333; border-top: 1px solid #eee; padding-top: 10px;">Key Games:</h4>
+                        <ul class="key-games-list">
+                            {% for game in key_games %}
+                            <li>
+                                                                <span class="{{ 'win-text' if game.win == 1 else 'loss-text' if game.win == 0 else '' }}" style="font-weight: bold; min-width: 20px; display: inline-block;">
+                                                                    {% if game.win == 1 %}W{% elif game.win == 0 %}L{% else %}-{% endif %}
+                                                                </span>
+                                                                vs <a href="{{ url_for('team_page', team_tid=game.opponent_tid, season_year=game.season) }}" class="team-link">{{ game.opponent_abbrev }}</a>
+                                                                &nbsp;{# <<< ADDED NON-BREAKING SPACE HERE #}
+                                                                ({{ game.location[:1] if game.location else 'N' }})
+                                                                {{ game.team_score_official|int }}-{{ game.opponent_score_official|int }}
+                                                                <span class="game-quad-badge">{{ game.game_quadrant }}</span>
+                                                            </li>
+                            {% endfor %}
+                        </ul>
+                    {% elif team_details %} {# Only show "No key games" if team_details existed (meaning a valid season was loaded) #}
+                    <h4 style="margin-top: 20px; margin-bottom: 8px; font-size: 0.95em; color: #333; border-top: 1px solid #eee; padding-top: 10px;">Key Games:</h4>
+                    <p style="font-size: 0.9em; color: #666;">No significant quadrant games found.</p>
+                    {% endif %}
+                    {# --- END Key Games Section --- #}
+                </div>
+
+                <div class="stat-block grid-item">
+                    <h3>Recruiting Class</h3>
+                    <div class="stat-grid">
+                        <div class="stat-item"><strong># Recruits:</strong> {{ team_details.get('num_recruits', 0)|int }}</div>
+                        <div class="stat-item"><strong>Avg OVR:</strong> {{ "%.1f"|format(team_details.get('avg_recruit_ovr')) if team_details.get('avg_recruit_ovr') is not none and team_details.get('avg_recruit_ovr') != 0 else 'N/A' }}</div>
+                        <div class="stat-item"><strong>5★:</strong> {{ team_details.get('num_5_star', 0)|int }}</div>
+                        <div class="stat-item"><strong>4★:</strong> {{ team_details.get('num_4_star', 0)|int }}</div>
+                        <div class="stat-item"><strong>3★:</strong> {{ team_details.get('num_3_star', 0)|int }}</div>
+                        <div class="stat-item"><strong>JUCOs:</strong> {{ team_details.get('num_juco', 0)|int }}</div>
+                        <div class="stat-item"><strong>Grad Transfers:</strong> {{ team_details.get('num_gt', 0)|int }}</div>
+                        
+                        {# MODIFIED: Combined Service Scores including KTV #}
+                        <div class="stat-item service-scores-item">
+                            <strong>KTV | OnZ | NSPN | Storms | 24/8</strong>
+                            <span>
+                                {{ "%.1f"|format(team_details.get('score_ktv')) if team_details.get('score_ktv') is not none and team_details.get('score_ktv') != 0 else 'N/A' }} |
+                                {{ "%.1f"|format(team_details.get('score_onz')) if team_details.get('score_onz') is not none and team_details.get('score_onz') != 0 else 'N/A' }} |
+                                {{ "%.1f"|format(team_details.get('score_nspn')) if team_details.get('score_nspn') is not none and team_details.get('score_nspn') != 0 else 'N/A' }} |
+                                {{ "%.1f"|format(team_details.get('score_storms')) if team_details.get('score_storms') is not none and team_details.get('score_storms') != 0 else 'N/A' }} |
+                                {{ "%.1f"|format(team_details.get('score_248sports')) if team_details.get('score_248sports') is not none and team_details.get('score_248sports') != 0 else 'N/A' }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div> {# End of .stats-grid-container #}
+
+        {% else %}
+            <h2 class="page-title">Team: {{ team_abbrev_for_title if team_abbrev_for_title != "Unknown" else "Details" }} - Season {{ current_season_displayed }}</h2>
+            <p>No summary data found for this team in this season. Historical data may be available below.</p>
+        {% endif %}
+
+        {# ----- SCHEDULE & RESULTS (same as response #150)----- #}
+        {% if game_log %}
+        <div class="stat-block">
+            <h3>Schedule & Results (Season {{ current_season_displayed }})</h3>
+            <table class="schedule-table">
+                <thead>
+                    <tr>
+                        <th class="col-num">#</th>
+                        <th class="col-opp">Opponent</th>
+                        <th class="col-loc">Loc</th>
+                        <th class="col-res">Result/Prediction</th>
+                        <th class="col-score">Score</th>
+                        <th class="col-score">Opp Score</th>
+                        <th class="col-q">Q</th>
+                        <th class="col-prob">Win Prob</th>
+                        <th class="col-marg">Margin</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for game in game_log %}
+                    <tr class="{{ 'played-false' if not game.is_played else ('win-row' if game.win == 1 else 'loss-row' if game.win == 0 else '') }}">
+                        <td class="col-num">{{ game.team_game_num_in_season }}</td>
+                        <td class="col-opp"><a href="{{ url_for('team_page', team_tid=game.opponent_tid, season_year=game.season) }}" class="team-link">
+                            {{ tid_to_school_name_map.get(game.opponent_tid, game.opponent_abbrev) }}
+                        </a></td>
+                        <td class="col-loc">{{ game.location[:1] if game.location else 'N' }}</td>
+                        <td class="col-res">{% if game.is_played %}{% if game.win == 1 %} W {% elif game.win == 0 %} L {% else %} TBD {% endif %}{% if game.overtimes is not none and game.overtimes > 0 %}({{game.overtimes}}OT){% endif %}{% else %} Pred. {% endif %}</td>
+                        <td class="col-score number">{% if game.is_played %}{{ game.team_score_official|int if game.team_score_official is not none else '' }}{% else %}{{ game.pred_score_team|int if game.pred_score_team is not none else '?' }}{% endif %}</td>
+                        <td class="col-score number">{% if game.is_played %}{{ game.opponent_score_official|int if game.opponent_score_official is not none else '' }}{% else %}{{ game.pred_score_opponent|int if game.pred_score_opponent is not none else '?' }}{% endif %}</td>
+                        <td class="col-q text-center">{{ game.game_quadrant if game.game_quadrant and game.game_quadrant != "N/A" else '-' }}</td>
+                        <td class="col-prob number">{% if not game.is_played and game.pred_win_prob_team is not none %}{{ "%.1f"|format(game.pred_win_prob_team * 100) }}%{% elif game.is_played %}{% else %} ? {% endif %}</td>
+                        <td class="col-marg number">{% if not game.is_played and game.pred_margin_team is not none %}{{ "%+.1f"|format(game.pred_margin_team) }}{% elif game.is_played and game.team_score_official is not none and game.opponent_score_official is not none %}{{ "%+d"|format(game.team_score_official - game.opponent_score_official) }}{% else %} ? {% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% elif team_details %}
+        <div class="stat-block"><h3>Schedule & Results (Season {{ current_season_displayed }})</h3><p>No game log data found for this team in this season.</p></div>
+        {% endif %}
+
+        {# ----- HISTORICAL SEASON SUMMARIES (same as response #150) ----- #}
+        {% if historical_summary %}
+        <div class="stat-block">
+            <h3>Historical Season Summaries for {{ team_abbrev_for_title if team_abbrev_for_title != "Unknown" else "This Team" }}</h3>
+            <table class="history-table">
+                <thead>
+                    <tr>
+                        <th class="col-season">Season</th><th class="col-coach">Coach</th> <th class="col-wl">W-L</th>
+                        <th class="col-adjem number">AdjEM</th><th class="col-rank text-center">Rank AdjEM</th>
+                        <th class="col-nt">NT Result</th><th class="col-nit">NIT Result</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for history in historical_summary %}
+                    <tr>
+                        <td class="col-season"><a href="{{ url_for('team_page', team_tid=(team_details.get('team_tid') if team_details else request.view_args.get('team_tid')), season_year=history.season) }}">{{ history.season }}</a></td>
+                        <td class="col-coach">
+                            {% set hist_coach_id = history.get('coach_id') %}{% set hist_coach_name = history.get('coach_name', 'N/A') %}
+                            {% if hist_coach_id is not none and hist_coach_id != 0 %}<a href="{{ url_for('coach_detail_page', coach_id=hist_coach_id, season_year=history.season) }}" class="coach-link">{{ hist_coach_name }}</a>
+                            {% else %}{{ hist_coach_name }}{% endif %}
+                        </td>
+                        <td class="col-wl">{{ history.wins }}-{{ history.losses }}</td>
+                        <td class="col-adjem number">{{ "%.2f"|format(history.get('adj_em')) if history.get('adj_em') is not none else 'N/A'}}</td>
+                        <td class="col-rank text-center">{{ history.get('rank_adj_em') if history.get('rank_adj_em') is not none and history.get('rank_adj_em') != 0 else 'N/A' }}</td>
+                        <td class="col-nt">{% set hist_nt_res = history.get('nt_result') %}{% set hist_nt_s = history.get('nt_seed') %}{% if hist_nt_res and hist_nt_res != 'N/A' and hist_nt_res != 0 %}{% if hist_nt_s is not none and hist_nt_s != 0 %}{{ hist_nt_s|int }} - {% endif %}{% if hist_nt_res == 'Champion' %}🏆{% else %}{{ hist_nt_res }}{% endif %}{% else %}-{% endif %}</td>
+                        <td class="col-nit">{% set hist_nit_res = history.get('nit_result') %}{% set hist_nit_s = history.get('nit_seed') %}{% if hist_nit_res and hist_nit_res != 'N/A' and hist_nit_res != 0 %}{% if hist_nit_s is not none and hist_nit_s != 0 %}{{ hist_nit_s|int }} - {% endif %}{% if hist_nit_res == 'NIT Champion' %}🍩{% else %}{{ hist_nit_res }}{% endif %}{% else %}-{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </div>
+    {% include 'footer.html' %}
+</body>
+</html>

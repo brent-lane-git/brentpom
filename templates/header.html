@@ -1,0 +1,43 @@
+{# templates/header.html #}
+<header class="brentpom-header">
+    <div class="header-content">
+        <span class="brentpom-title">BrentPom</span>
+        <nav class="main-nav">
+            <a href="{{ url_for('rankings') }}" class="{{ 'active' if active_tab == 'teams' else '' }}">Teams</a>
+            <a href="{{ url_for('conferences_page') }}" class="{{ 'active' if active_tab == 'conferences' else '' }}">Conferences</a>
+            <a href="{{ url_for('coaches_list_page') }}" class="{{ 'active' if active_tab == 'coaches' else '' }}">Coaches</a>
+            <a href="{{ url_for('recruiting_page') }}" class="{{ 'active' if active_tab == 'recruiting' else '' }}">Recruiting</a> {# NEW TAB #}
+        </nav>
+    </div>
+</header>
+<div class="season-selector-bar">
+    <span>
+        {% if active_tab == 'recruiting' %}
+            Class Year:
+        {% else %}
+            Season:
+        {% endif %}
+    </span>
+    {% if all_available_seasons %} {# This var might represent class years for recruiting tab #}
+        {% for s_or_cy in all_available_seasons %}
+            {# Construct URL based on the active tab #}
+            {% if active_tab == 'teams' %}
+                <a href="{{ url_for('rankings', season_year=s_or_cy) }}" class="{{ 'active' if s_or_cy == current_season_displayed else '' }}">{{ s_or_cy }}</a>
+            {% elif active_tab == 'conferences' %}
+                <a href="{{ url_for('conferences_page', season_year=s_or_cy) }}" class="{{ 'active' if s_or_cy == current_season_displayed else '' }}">{{ s_or_cy }}</a>
+            {% elif active_tab == 'coaches' %}
+            <a href="{{ url_for('coaches_list_page', season_year=s_or_cy) }}" class="{{ 'active' if s_or_cy == current_season_displayed else '' }}">{{ s_or_cy }}</a
+            {% elif active_tab == 'recruiting' %}
+                 <a href="{{ url_for('recruiting_page', class_year=s_or_cy) }}" class="{{ 'active' if s_or_cy == current_season_displayed else '' }}">{{ s_or_cy }}</a>
+            {% elif active_tab == 'predictions' %}
+                 <a href="{{ url_for('predictions_page', season_year=s_or_cy) }}" class="{{ 'active' if s_or_cy == current_season_displayed else '' }}">{{ s_or_cy }}</a>
+            {% else %}
+                 <a href="#">{{ s_or_cy }}</a> {# Fallback #}
+            {% endif %}
+
+            {% if not loop.last %}|{% endif %}
+        {% endfor %}
+    {% else %}
+        <span>No Seasons/Years Available</span>
+    {% endif %}
+</div>

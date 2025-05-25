@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title if page_title else "Recruiting Rankings - BrentPom" }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        /* Styles specific to recruiting table, can be moved to style.css */
+        .recruiting-table th, .recruiting-table td {
+            font-size: 0.82em; /* Slightly smaller for more columns */
+            white-space: nowrap;
+            padding: 7px 9px;
+        }
+        .recruiting-table td.number, .recruiting-table th.number { text-align: right;}
+        .recruiting-table td.center, .recruiting-table th.center { text-align: center;}
+        .recruiting-table .col-team-name { min-width: 120px; white-space: normal; }
+        .recruiting-table .col-coach-name { min-width: 100px; white-space: normal; }
+    </style>
+</head>
+<body>
+    {% include 'header.html' %} {# active_tab, all_available_seasons (as class years), current_season_displayed (as class year), etc. passed #}
+
+    <div class="container">
+        <h2 class="page-title">{{ page_title }}
+            {% if effective_season and effective_season != "N/A" %}
+                <span style="font-size:0.7em; color: #555;">(Impacting {{ effective_season }} Playing Season)</span>
+            {% endif %}
+        </h2>
+
+        {% if recruiting_summaries %}
+            <table class="recruiting-table" id="recruitingTable">
+                <thead>
+                    <tr>
+                        <th onclick="sortTable(0)" class="center">Rk</th>
+                        <th onclick="sortTable(1)" class="col-team-name">Team</th>
+                        <th onclick="sortTable(2)">Conf</th>
+                        <th onclick="sortTable(3)" class="col-coach-name">Coach</th>
+                        <th onclick="sortTable(4)" class="center"># Rec.</th>
+                        <th onclick="sortTable(5)" class="number">Avg OVR</th>
+                        <th onclick="sortTable(6)" class="center">5★</th>
+                        <th onclick="sortTable(7)" class="center">4★</th>
+                        <th onclick="sortTable(8)" class="center">3★</th>
+                        <th onclick="sortTable(9)" class="center">2★</th>
+                        <th onclick="sortTable(10)" class="center">1★</th>
+                        <th onclick="sortTable(11)" class="center">GTs</th>
+                        <th onclick="sortTable(12)" class="center">JUCOs</th>
+                        <th onclick="sortTable(13)" class="center">CPRs</th>
+                        <th onclick="sortTable(14)" class="number">KTV</th>
+                        <th onclick="sortTable(15)" class="number">OnZ</th>
+                        <th onclick="sortTable(16)" class="number">NSPN</th>
+                        <th onclick="sortTable(17)" class="number">Storms</th>
+                        <th onclick="sortTable(18)" class="number">24/8</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for team_class in recruiting_summaries %}
+                    <tr>
+                        <td class="center">{{ team_class.rank }}</td>
+                        <td class="col-team-name">
+                            <a href="{{ url_for('team_page', team_tid=team_class.team_tid, season_year=effective_season) }}" class="team-link">
+                                {{ team_class.team_abbrev }}
+                            </a>
+                        </td>
+                        <td>
+                            {# --- CLICKABLE CONFERENCE LINK --- #}
+                            {% if team_class.cid is not none and team_class.cid != -999 %}
+                                <a href="{{ url_for('conference_detail_page', conf_id=team_class.cid, season_year=effective_season) }}" class="team-link">
+                                    {{ cid_to_conf_abbrev_map.get(team_class.cid|int, "Conf " ~ team_class.cid|string) }}
+                                </a>
+                            {% else %}
+                                N/A
+                            {% endif %}
+                        </td>
+                        <td class="col-coach-name">
+                            {% set r_coach_id = team_class.get('coach_id') %}
+                            {% set r_coach_name = team_class.get('coach_name', 'N/A') %}
+                            {% if r_coach_id is not none and r_coach_id != 0 and r_coach_name != 'N/A' %}
+                                <a href="{{ url_for('coach_detail_page', coach_id=r_coach_id, season_year=effective_season) }}" class="coach-link">
+                                    {{ r_coach_name }}
+                                </a>
+                            {% else %}
+                                {{ r_coach_name }}
+                            {% endif %}
+                        </td>
+                        <td class="center">{{ team_class.get('num_recruits', 0)|int }}</td>
+                        <td class="number">{{ "%.1f"|format(team_class.get('avg_recruit_ovr')) if team_class.get('avg_recruit_ovr') is not none and team_class.get('avg_recruit_ovr') != 0 else 'N/A' }}</td>
+                        <td class="center">{{ team_class.get('num_5_star', 0)|int }}</td>
+                        <td class="center">{{ team_class.get('num_4_star', 0)|int }}</td>
+                        <td class="center">{{ team_class.get('num_3_star', 0)|int }}</td>
+                        <td class="center">{{ team_class.get('num_2_star', 0)|int }}</td>
+                        <td class="center">{{ team_class.get('num_1_star', 0)|int }}</td>
+                        <td class="center">{{ team_class.get('num_gt', 0)|int }}</td>
+                        <td class="center">{{ team_class.get('num_juco', 0)|int }}</td>
+                        <td class="center">{{ team_class.get('num_cpr', 0)|int }}</td>
+                        <td class="number">{{ "%.2f"|format(team_class.get('score_ktv')) if team_class.get('score_ktv') is not none and team_class.get('score_ktv') != 0 else 'N/A' }}</td>
+                        <td class="number">{{ "%.2f"|format(team_class.get('score_onz')) if team_class.get('score_onz') is not none and team_class.get('score_onz') != 0 else 'N/A' }}</td>
+                        <td class="number">{{ "%.2f"|format(team_class.get('score_nspn')) if team_class.get('score_nspn') is not none and team_class.get('score_nspn') != 0 else 'N/A' }}</td>
+                        <td class="number">{{ "%.2f"|format(team_class.get('score_storms')) if team_class.get('score_storms') is not none and team_class.get('score_storms') != 0 else 'N/A' }}</td>
+                        <td class="number">{{ "%.2f"|format(team_class.get('score_248sports')) if team_class.get('score_248sports') is not none and team_class.get('score_248sports') != 0 else 'N/A' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>No recruiting data found for Class of {{ current_season_displayed }} (effective for {{ effective_season }} playing season).</p>
+        {% endif %}
+    </div>
+
+    {% include 'footer.html' %}
+    <script>
+        // Basic table sorting script (same as other pages, adjust indices if needed)
+        function sortTable(n) {
+            var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
+            table = document.getElementById("recruitingTable");
+            if (!table) return;
+            switching = true;
+            var currentSortDir = table.rows[0].getElementsByTagName("TH")[n].getAttribute("data-sort-dir");
+            dir = (currentSortDir === "asc") ? "desc" : "asc";
+            
+            for (let th_idx = 0; th_idx < table.rows[0].getElementsByTagName("TH").length; th_idx++) {
+                table.rows[0].getElementsByTagName("TH")[th_idx].removeAttribute("data-sort-dir");
+                table.rows[0].getElementsByTagName("TH")[th_idx].classList.remove('sort-asc', 'sort-desc');
+            }
+            table.rows[0].getElementsByTagName("TH")[n].setAttribute("data-sort-dir", dir);
+            table.rows[0].getElementsByTagName("TH")[n].classList.add(dir === "asc" ? 'sort-asc' : 'sort-desc');
+
+            while (switching) {
+                switching = false; rows = table.rows;
+                for (i = 1; i < (rows.length - 1); i++) {
+                    shouldSwitch = false; xCell = rows[i].getElementsByTagName("TD")[n]; yCell = rows[i + 1].getElementsByTagName("TD")[n];
+                    var xContent = xCell.innerText.trim().toLowerCase(); var yContent = yCell.innerText.trim().toLowerCase();
+                    let xNum = parseFloat(xContent.replace(/,/g, '')); let yNum = parseFloat(yContent.replace(/,/g, ''));
+
+                    // Adjust numeric sort columns based on your table
+                    if (!isNaN(xNum) && !isNaN(yNum) && (xCell.classList.contains('number') || xCell.classList.contains('center') || n === 0) ) {
+                        if (dir == "asc") { if (xNum > yNum) { shouldSwitch = true; break; } }
+                        else if (dir == "desc") { if (xNum < yNum) { shouldSwitch = true; break; } }
+                    } else {
+                        if (dir == "asc") { if (xContent > yContent) { shouldSwitch = true; break; } }
+                        else if (dir == "desc") { if (xContent < yContent) { shouldSwitch = true; break; } }
+                    }
+                }
+                if (shouldSwitch) { rows[i].parentNode.insertBefore(rows[i + 1], rows[i]); switching = true; switchcount++; }
+            }
+        }
+        document.querySelectorAll('#recruitingTable th').forEach((th, index) => {
+            th.addEventListener('click', () => sortTable(index));
+        });
+    </script>
+</body>
+</html>

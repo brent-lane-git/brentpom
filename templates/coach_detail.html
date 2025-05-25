@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title if title else "Coach Profile - BrentPom" }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        /* ... (keep styles from response #162 or your latest) ... */
+        .coach-header { text-align: center; margin-bottom: 30px; }
+        .stat-section { margin-bottom: 30px; }
+        .stat-section h3 { font-size: 1.4em; color: #2d3748; border-bottom: 2px solid #4299e1; padding-bottom: 8px; margin-bottom: 15px; font-weight: 600;}
+        .career-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; background-color: #f8f9fa; padding: 20px; border-radius: 6px; border: 1px solid #e2e8f0;}
+        .career-stat-item { background-color: #fff; padding: 12px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.07); font-size: 0.9em;}
+        .career-stat-item strong { display: block; font-size: 0.85em; color: #4a5568; margin-bottom: 4px; text-transform: uppercase; font-weight: 600;}
+        .seasonal-history-table th, .seasonal-history-table td { font-size: 0.825em; padding: 8px 10px;}
+        .seasonal-history-table th { white-space: nowrap; }
+    </style>
+</head>
+<body>
+    {% include 'header.html' %}
+
+    <div class="container">
+        {% if coach_info %}
+            <div class="coach-header">
+                <h2 class="page-title">{{ coach_info.get('coach_name', 'Coach Profile') }}</h2>
+            </div>
+
+            {# --- CALCULATE CAREER POSTSEASON STATS USING JINJA from seasonal_stats --- #}
+            {% set career_nt_appearances = namespace(count=0) %}
+            {% set career_nit_appearances = namespace(count=0) %}
+            {% set career_elite_eights = namespace(count=0) %}
+            {% set career_final_fours = namespace(count=0) %}
+            {% set career_nat_championship_games = namespace(count=0) %}
+            {% set career_nt_champs = namespace(count=0) %}
+            {% set career_nit_champs = namespace(count=0) %}
+
+            {% if seasonal_stats %}
+                {% for season_stat_item in seasonal_stats %}
+                    {# Use .get() for safety as these come from a join #}
+                    {% set nt_result_current_season = season_stat_item.get('nt_result') %}
+                    {% set nit_result_current_season = season_stat_item.get('nit_result') %}
+
+                    {% if nt_result_current_season and nt_result_current_season != 'N/A' %}
+                        {% set career_nt_appearances.count = career_nt_appearances.count + 1 %}
+                        {% if nt_result_current_season == 'Champion' %}{% set career_nt_champs.count = career_nt_champs.count + 1 %}{% endif %}
+                        {% if nt_result_current_season in ['Championship Game', 'Champion'] %}{% set career_nat_championship_games.count = career_nat_championship_games.count + 1 %}{% endif %}
+                        {% if nt_result_current_season in ['Final Four', 'Championship Game', 'Champion'] %}{% set career_final_fours.count = career_final_fours.count + 1 %}{% endif %}
+                        {% if nt_result_current_season in ['Elite 8', 'Final Four', 'Championship Game', 'Champion'] %}{% set career_elite_eights.count = career_elite_eights.count + 1 %}{% endif %}
+                    {% endif %}
+                    {% if nit_result_current_season and nit_result_current_season != 'N/A' %}
+                        {% set career_nit_appearances.count = career_nit_appearances.count + 1 %}
+                        {% if nit_result_current_season == 'NIT Champion' %}{% set career_nit_champs.count = career_nit_champs.count + 1 %}{% endif %}
+                    {% endif %}
+                {% endfor %}
+            {% endif %}
+            {# --- END CALCULATION --- #}
+
+            {% if career_stats %}
+            <div class="stat-section">
+                <h3>Career Summary</h3>
+                <div class="career-stats-grid">
+                    {# ... (Existing career stats items) ... #}
+                    <div class="career-stat-item"><strong>Seasons:</strong> {{ career_stats.get('seasons_coached', 'N/A') }}</div>
+                    <div class="career-stat-item"><strong>Teams Coached:</strong> {{ career_stats.get('teams_coached_count', 'N/A') }}</div>
+                    <div class="career-stat-item"><strong>Overall W-L:</strong> {{ career_stats.get('total_wins', 0) }}-{{ career_stats.get('total_losses', 0) }}</div>
+                    <div class="career-stat-item"><strong>Win %:</strong> {{ "%.3f"|format(career_stats.get('career_win_pct', 0.0)) }}</div>
+                    <div class="career-stat-item"><strong>Avg. Team AdjEM:</strong> {{ "%.2f"|format(career_stats.get('career_avg_team_adj_em')) if career_stats.get('career_avg_team_adj_em') is not none else 'N/A' }}</div>
+                    
+                    <div class="career-stat-item"><strong>NT Appearances:</strong> {{ career_nt_appearances.count }}</div>
+                    <div class="career-stat-item"><strong>NT Championships:</strong> {{ career_nt_champs.count }}</div>
+                    <div class="career-stat-item"><strong>NT Champ. Games:</strong> {{ career_nat_championship_games.count }}</div>
+                    <div class="career-stat-item"><strong>NT Final Fours:</strong> {{ career_final_fours.count }}</div>
+                    <div class="career-stat-item"><strong>NT Elite Eights:</strong> {{ career_elite_eights.count }}</div>
+                    <div class="career-stat-item"><strong>NIT Appearances:</strong> {{ career_nit_appearances.count }}</div>
+                    <div class="career-stat-item"><strong>NIT Championships:</strong> {{ career_nit_champs.count }}</div>
+                    
+                    <div class="career-stat-item"><strong>Q1:</strong> {{ career_stats.get('career_q1_w',0) }}-{{ career_stats.get('career_q1_l',0) }}</div>
+                    <div class="career-stat-item"><strong>Q2:</strong> {{ career_stats.get('career_q2_w',0) }}-{{ career_stats.get('career_q2_l',0) }}</div>
+                    <div class="career-stat-item"><strong>Q3:</strong> {{ career_stats.get('career_q3_w',0) }}-{{ career_stats.get('career_q3_l',0) }}</div>
+                    <div class="career-stat-item"><strong>Q4:</strong> {{ career_stats.get('career_q4_w',0) }}-{{ career_stats.get('career_q4_l',0) }}</div>
+
+                    <div class="career-stat-item"><strong>Total Recruits:</strong> {{ career_stats.get('career_total_recruits',0) }}</div>
+                    <div class="career-stat-item"><strong>Avg Recruit OVR:</strong> {{ "%.1f"|format(career_stats.get('career_avg_recruit_ovr_of_classes')) if career_stats.get('career_avg_recruit_ovr_of_classes') is not none else 'N/A'}}</div>
+                    <div class="career-stat-item"><strong>5★ Recruits:</strong> {{ career_stats.get('career_total_5_stars',0) }}</div>
+                    <div class="career-stat-item"><strong>Avg KTV Score:</strong> {{ "%.2f"|format(career_stats.get('career_avg_score_ktv')) if career_stats.get('career_avg_score_ktv') is not none else 'N/A' }}</div>
+                </div>
+            </div>
+            {% else %}
+            <p>No career statistics found for this coach.</p>
+            {% endif %}
+
+            {% if seasonal_stats %}
+            <div class="stat-section">
+                <h3>Season-by-Season Team Performance</h3>
+                <table class="seasonal-history-table">
+                    <thead>
+                        <tr>
+                            <th>Season</th><th>Team</th><th>W-L</th>
+                            <th class="number">Team AdjEM</th><th class="text-center">Rank</th>
+                            <th>Q1-Q4 Record</th>
+                            <th class="number">AdjEM SOS</th>
+                            <th class="number">Luck</th>
+                            <th class="number">WAB</th>
+                            <th>Postseason</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for season_stat in seasonal_stats %}
+                        <tr>
+                            <td><a href="{{ url_for('coach_detail_page', coach_id=coach_info.get('coach_id'), season_year=season_stat.season) }}">{{ season_stat.season }}</a></td>
+                            <td><a href="{{ url_for('team_page', team_tid=season_stat.team_tid, season_year=season_stat.season) }}" class="team-link">{{ season_stat.team_abbrev | default('N/A') }}</a></td>
+                            <td>{{ season_stat.wins }}-{{ season_stat.losses }}</td>
+                            <td class="number">{{ "%.2f"|format(season_stat.team_adj_em) if season_stat.team_adj_em is not none else 'N/A' }}</td>
+                            <td class="text-center">{{ season_stat.team_rank_adj_em if season_stat.team_rank_adj_em is not none and season_stat.team_rank_adj_em != 0 else 'N/A' }}</td>
+                            <td>{{season_stat.Q1_Record_CSS}} | {{season_stat.Q2_Record_CSS}} | {{season_stat.Q3_Record_CSS}} | {{season_stat.Q4_Record_CSS}}</td>
+                            <td class="number">{{ "%.2f"|format(season_stat.get('team_avg_opp_adj_em')) if season_stat.get('team_avg_opp_adj_em') is not none else 'N/A' }}</td>
+                            <td class="number">{{ "%+.2f"|format(season_stat.get('team_luck_adj')) if season_stat.get('team_luck_adj') is not none else 'N/A' }}</td>
+                            <td class="number">{{ "%.2f"|format(season_stat.get('team_wab')) if season_stat.get('team_wab') is not none else 'N/A' }}</td>
+                            <td>
+                                {% set s_nt_res = season_stat.get('nt_result') %}
+                                {% set s_nt_s = season_stat.get('nt_seed') %}
+                                {% set s_nit_res = season_stat.get('nit_result') %}
+                                {% set s_nit_s = season_stat.get('nit_seed') %}
+                                {% if s_nt_res and s_nt_res != 'N/A' %}NT {% if s_nt_s is not none and s_nt_s != 0 %}{{ s_nt_s|int }}{% endif %} - {% if s_nt_res == 'Champion' %}🏆{% else %}{{ s_nt_res }}{% endif %}
+                                {% elif s_nit_res and s_nit_res != 'N/A' %}NIT {% if s_nit_s is not none and s_nit_s != 0 %}{{ s_nit_s|int }}{% endif %} - {% if s_nit_res == 'NIT Champion' %}🍩{% else %}{{ s_nit_res }}{% endif %}
+                                {% else %}-{% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="stat-section">
+                <h3>Season-by-Season Recruiting</h3>
+                <table class="seasonal-history-table">
+                    <thead>
+                        <tr>
+                            <th>Season</th><th>Team</th>
+                            <th class="number">Avg Recruit OVR</th>
+                            <th class="text-center">5★</th><th class="text-center">4★</th><th class="text-center">3★</th>
+                            <th class="text-center">2★</th><th class="text-center">1★</th>
+                            <th class="text-center">GTs</th><th class="text-center">JUCOs</th><th class="text-center">CPRs</th>
+                            <th class="number">Scores (KTV|OnZ|NSPN|St|24/8)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for season_stat in seasonal_stats %}
+                        <tr>
+                            <td>{{ season_stat.season }}</td>
+                            <td><a href="{{ url_for('team_page', team_tid=season_stat.team_tid, season_year=season_stat.season) }}" class="team-link">{{ season_stat.team_abbrev | default('N/A') }}</a></td>
+                            <td class="number">{{ "%.1f"|format(season_stat.avg_recruit_ovr) if season_stat.avg_recruit_ovr is not none and season_stat.avg_recruit_ovr != 0 else 'N/A' }}</td>
+                            <td class="text-center">{{ season_stat.get('num_5_star',0)|int }}</td>
+                            <td class="text-center">{{ season_stat.get('num_4_star',0)|int }}</td>
+                            <td class="text-center">{{ season_stat.get('num_3_star',0)|int }}</td>
+                            <td class="text-center">{{ season_stat.get('num_2_star',0)|int }}</td>
+                            <td class="text-center">{{ season_stat.get('num_1_star',0)|int }}</td>
+                            <td class="text-center">{{ season_stat.get('num_gt',0)|int }}</td>
+                            <td class="text-center">{{ season_stat.get('num_juco',0)|int }}</td>
+                            <td class="text-center">{{ season_stat.get('team_num_cpr',0)|int }}</td> {# Using aliased name from join if applicable #}
+                            <td class="number service-scores-cell">
+                                {{ "%.1f"|format(season_stat.get('score_ktv')) if season_stat.get('score_ktv') is not none and season_stat.get('score_ktv') !=0 else 'N/A' }} |
+                                {{ "%.1f"|format(season_stat.get('score_onz')) if season_stat.get('score_onz') is not none and season_stat.get('score_onz') !=0 else 'N/A' }} |
+                                {{ "%.1f"|format(season_stat.get('score_nspn')) if season_stat.get('score_nspn') is not none and season_stat.get('score_nspn') !=0 else 'N/A' }} |
+                                {{ "%.1f"|format(season_stat.get('score_storms')) if season_stat.get('score_storms') is not none and season_stat.get('score_storms') !=0 else 'N/A' }} |
+                                {{ "%.1f"|format(season_stat.get('score_248sports')) if season_stat.get('score_248sports') is not none and season_stat.get('score_248sports') !=0 else 'N/A' }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p>No season-by-season statistics found for this coach.</p>
+            {% endif %}
+        {% else %}
+            <h2 class="page-title">Coach Not Found</h2>
+            <p>The requested coach could not be found, or has no data.</p>
+        {% endif %}
+    </div>
+    {% include 'footer.html' %}
+</body>
+</html>

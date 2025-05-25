@@ -1,0 +1,343 @@
+/* static/css/style.css */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f0f2f5; /* Lighter grey background */
+    color: #333;
+    line-height: 1.6;
+    font-size: 16px;
+}
+
+.container {
+    width: 90%;
+    max-width: 1400px; /* Max width for very large screens */
+    margin: 20px auto;
+    background-color: #ffffff;
+    padding: 20px 30px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+    border-radius: 8px;
+}
+
+/* Header Styles */
+.brentpom-header {
+    background-color: #2d3748; /* Darker, more modern blue-grey */
+    color: #e2e8f0; /* Lighter grey text */
+    padding: 18px 0;
+    text-align: center;
+    border-bottom: 5px solid #e53e3e; /* Red accent */
+}
+
+.brentpom-header .header-content {
+    width: 90%;
+    max-width: 1400px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.brentpom-title {
+    font-size: 2.5em;
+    font-weight: 700; /* Bolder */
+    color: #ffffff;
+    letter-spacing: 0.5px;
+}
+
+.main-nav a {
+    color: #a0aec0; /* Medium grey for nav links */
+    text-decoration: none;
+    margin: 0 12px;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-weight: 500;
+    transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+    font-size: 0.95em;
+}
+
+.main-nav a:hover {
+    background-color: #4a5568; /* Slightly darker hover */
+    color: #fff;
+}
+
+.main-nav a.active {
+    background-color: #e53e3e;
+    color: #fff;
+    font-weight: 600;
+}
+
+.season-selector-bar {
+    text-align: center;
+    padding: 10px 0;
+    background-color: #edf2f7; /* Very light grey */
+    border-bottom: 1px solid #e2e8f0;
+    margin-bottom: 25px;
+    font-size: 0.9em;
+}
+.season-selector-bar span {
+    font-weight: 600;
+    margin-right: 10px;
+    color: #2d3748;
+}
+.season-selector-bar a {
+    margin: 0 7px;
+    color: #4299e1; /* Blue for links */
+    text-decoration: none;
+    font-weight: 500;
+}
+.season-selector-bar a:hover,
+.season-selector-bar a.active {
+    text-decoration: underline;
+    color: #e53e3e; /* Red accent on hover/active */
+}
+.season-selector-bar a.active {
+    font-weight: 700;
+}
+
+/* Page Specific Titles */
+h2.page-title {
+    text-align: center;
+    color: #2d3748;
+    margin-top: 0;
+    margin-bottom: 30px;
+    font-size: 2em;
+    font-weight: 600;
+}
+
+/* Team Page Specific Centering & Info */
+.team-page-header-info {
+    text-align: center;
+    margin-bottom: 20px;
+    line-height: 1.5;
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-radius: 6px;
+    border: 1px solid #e9ecef;
+}
+.team-page-header-info h2.page-title {
+    margin-bottom: 10px;
+}
+.team-page-header-info p {
+    margin: 5px 0;
+    color: #4a5568;
+}
+.team-page-postseason-info {
+    text-align: center;
+    font-weight: 600;
+    margin-bottom: 30px;
+    font-size: 1.15em;
+    padding: 10px;
+}
+.nt-text { color: #2f855a; /* Darker, richer Green */ }
+.nit-text { color: #c53030; /* Darker, richer Red */ }
+
+/* Table Styles (General) */
+table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-top: 25px;
+    font-size: 0.875em;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    border-radius: 6px;
+    overflow: hidden;
+}
+th, td {
+    border: 1px solid #e2e8f0;
+    padding: 10px 12px;
+    text-align: left;
+    vertical-align: middle;
+}
+th {
+    background-color: #4a5568;
+    color: #fff;
+    cursor: pointer;
+    position: relative;
+    text-transform: uppercase;
+    font-size: 0.75em;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+}
+th::after { content: ''; position: absolute; right: 10px; top: 50%; transform: translateY(-50%); border: 4px solid transparent; opacity: 0.7; }
+th.sort-asc::after { border-bottom-color: #cbd5e0; }
+th.sort-desc::after { border-top-color: #cbd5e0; }
+
+tr:nth-child(even) td { background-color: #f7fafc; }
+tr:hover td { background-color: #e2e8f0; }
+
+/* Postseason Cell Coloring for team name on RANKINGS page */
+/* These ensure specificity if used on the main rankings table */
+#rankingsTable td.team-name-cell.nt-champion { background-color: #fff0b3 !important; font-weight: bold; }
+#rankingsTable td.team-name-cell.nt-champion:hover { background-color: #ffe766 !important; }
+#rankingsTable td.team-name-cell.nt-appearance { background-color: #d4edda !important; }
+#rankingsTable td.team-name-cell.nt-appearance:hover { background-color: #c3e6cb !important; }
+#rankingsTable td.team-name-cell.nit-appearance { background-color: #f8d7da !important; }
+#rankingsTable td.team-name-cell.nit-appearance:hover { background-color: #f5c6cb !important; }
+
+/* Schedule Table Specific Win/Loss Row Coloring - applies to all TDs in the row */
+.schedule-table tr.win-row td {
+    background-color: #d4edda !important; /* Light Green */
+}
+.schedule-table tr.loss-row td {
+    background-color: #f8d7da !important; /* Light Red */
+}
+.schedule-table tr.win-row:hover td {
+    background-color: #c3e6cb !important;
+}
+.schedule-table tr.loss-row:hover td {
+    background-color: #f5c6cb !important;
+}
+.schedule-table tr.played-false td {
+    background-color: #e3f2fd; /* Very Light blue for future games */
+}
+.schedule-table tr.played-false:hover td {
+    background-color: #bbdefb;
+}
+
+.text-center { text-align: center !important; }
+.text-right { text-align: right !important; }
+.number { text-align: right !important; }
+
+a.team-link, a.coach-link { color: #2b6cb0; font-weight: 500; }
+a.team-link:hover, a.coach-link:hover { color: #e53e3e; text-decoration: none;}
+
+.postseason-info {
+    font-size: 0.8em;
+    color: #4a5568;
+    margin-left: 10px;
+    white-space: nowrap;
+}
+.footer {
+    text-align: center;
+    margin-top: 40px;
+    padding: 25px;
+    font-size: 0.9em;
+    color: #718096;
+    border-top: 1px solid #e2e8f0;
+}
+
+/* --- Styles for 2x2 Stat Block Grid on Team Page --- */
+.stats-grid-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); /* Responsive: 2 columns on wider, 1 on smaller */
+    gap: 25px; /* Space between the grid items */
+    margin-bottom: 30px; /* Space before the schedule table */
+}
+
+.stats-grid-container .stat-block {
+    margin-bottom: 0; /* Remove bottom margin from individual blocks as grid gap handles it */
+    padding: 15px; /* Slightly reduced padding for blocks within the grid */
+    background-color: #ffffff; /* Ensure background for shadow */
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+}
+
+.stats-grid-container .stat-block h3 {
+    margin-top: 0;
+    color: #2d3748;
+    border-bottom: 2px solid #4299e1;
+    padding-bottom: 8px;
+    font-size: 1.15em; /* Consistent header size */
+    margin-bottom: 12px;
+    font-weight: 600;
+}
+
+/* Inner grid for individual stats if used (Key Metrics, Four Factors, Recruiting) */
+.stats-grid-container .stat-block .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); /* More compact items */
+    gap: 8px;
+}
+.stats-grid-container .stat-block .stat-item {
+    background-color: #f7fafc;
+    padding: 8px 10px;
+    border-radius: 4px;
+    border: 1px solid #e2e8f0;
+    font-size: 0.85em;
+}
+.stats-grid-container .stat-block .stat-item strong {
+    display: block;
+    color: #4a5568;
+    font-size: 0.75em; /* Smaller label */
+    margin-bottom: 2px;
+    text-transform: uppercase;
+    font-weight: 600;
+}
+
+/* Specific styling for Quadrant Summary if it doesn't use the inner .stat-grid */
+.stats-grid-container .stat-block .quadrant-summary p {
+    margin: 6px 0;
+    font-size: 0.95em;
+    text-align: center; /* Center the Q records */
+}
+.stats-grid-container .stat-block .quadrant-summary strong {
+    font-weight: 600;
+    color: #2d3748;
+}
+
+/* Schedule & History Table Column Width Hints - these are starting points */
+.schedule-table, .history-table {
+    font-size: 0.825em; /* Slightly smaller overall font for these tables */
+}
+.schedule-table th, .schedule-table td,
+.history-table th, .history-table td {
+    padding: 7px 9px;
+    word-break: keep-all; /* Try to prevent breaks unless necessary */
+}
+
+/* Schedule Table */
+.schedule-table .col-num { width: 3%; white-space: nowrap; text-align: center;}
+.schedule-table .col-opp { width: auto; min-width: 100px;}
+.schedule-table .col-loc { width: 4%; text-align: center; white-space: nowrap;}
+.schedule-table .col-res { width: 15%; white-space: nowrap;}
+.schedule-table .col-score { width: 6%; text-align: right; white-space: nowrap;}
+.schedule-table .col-q { width: 4%; text-align: center; white-space: nowrap;}
+.schedule-table .col-prob { width: 7%; text-align: right; white-space: nowrap;}
+.schedule-table .col-marg { width: 7%; text-align: right; white-space: nowrap;}
+
+/* History Table */
+.history-table .col-season { width: 8%; white-space: nowrap;}
+.history-table .col-coach { width: auto; min-width: 100px;}
+.history-table .col-wl { width: 10%; white-space: nowrap;}
+.history-table .col-adjem { width: 10%; text-align: right; white-space: nowrap;}
+.history-table .col-rank { width: 8%; text-align: center; white-space: nowrap;}
+.history-table .col-nt { width: auto; min-width: 90px;}
+.history-table .col-nit { width: auto; min-width: 90px;}
+.stat-block .key-games-list {
+    list-style-type: none;
+    padding-left: 0;
+    font-size: 0.9em; /* Slightly smaller than main text */
+}
+.stat-block .key-games-list li {
+    padding: 6px 0;
+    border-bottom: 1px dashed #eee;
+    display: flex; /* For alignment */
+    align-items: center;
+    flex-wrap: wrap; /* Allow wrapping for smaller screens */
+}
+.stat-block .key-games-list li:last-child {
+    border-bottom: none;
+}
+.stat-block .key-games-list .win-text {
+    color: #28a745; /* Green for win */
+    font-weight: bold;
+    margin-right: 8px;
+    min-width: 15px; /* Ensure 'W'/'L' aligns */
+}
+.stat-block .key-games-list .loss-text {
+    color: #dc3545; /* Red for loss */
+    font-weight: bold;
+    margin-right: 8px;
+    min-width: 15px; /* Ensure 'W'/'L' aligns */
+}
+.stat-block .key-games-list .game-quad-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    font-size: 0.75em;
+    font-weight: bold;
+    border-radius: 3px;
+    background-color: #6c757d; /* Grey badge */
+    color: white;
+    margin-left: 8px;
+}
